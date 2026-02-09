@@ -181,7 +181,7 @@ export function Home() {
       <section class="hero">
         <div>
           <p class="eyebrow">Remote Browser + MCP Agent Demo by Hanny</p>
-          <h1>Find XHS notes with natural language.</h1>
+          <h1>Find XHS notes with natural language</h1>
           <p class="sub">
             Ask a question, login through the MCP session view, and get structured results back.
           </p>
