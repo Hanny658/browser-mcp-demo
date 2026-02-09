@@ -1,4 +1,4 @@
-import { useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import "./style.css";
 
 type AgentStep = {
@@ -32,9 +32,12 @@ type Note = {
 type AgentRunResponse = {
   runId: string;
   status: string;
+  running?: boolean;
   sessionId?: string;
   viewUrl?: string;
   query?: string;
+  searchQuery?: string | null;
+  keywordCandidates?: string[];
   notes?: Note[];
   steps?: AgentStep[];
   error?: string | null;
@@ -66,6 +69,7 @@ export function Home() {
   const [scrollTimes, setScrollTimes] = useState(2);
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [viewUrl, setViewUrl] = useState<string | null>(null);
@@ -83,6 +87,7 @@ export function Home() {
   const applyRun = (data: AgentRunResponse) => {
     setRunId(data.runId);
     setStatus(data.status);
+    setRunning(Boolean(data.running));
     setSteps(data.steps ?? []);
     setNotes(data.notes ?? []);
     setViewUrl(data.viewUrl ?? null);
@@ -90,6 +95,36 @@ export function Home() {
     setError(data.error ?? null);
     setLastUpdated(new Date().toLocaleTimeString());
   };
+
+  const fetchRun = async (id: string) => {
+    const response = await fetch(`/agent/run/${id}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = typeof data?.error === "string" ? data.error : "Request failed";
+      throw new Error(message);
+    }
+    return data as AgentRunResponse;
+  };
+
+  useEffect(() => {
+    if (!runId || !running) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const data = await fetchRun(runId);
+        if (!active) return;
+        applyRun(data);
+      } catch {
+        // ignore polling errors
+      }
+    };
+    void poll();
+    const id = window.setInterval(poll, 1200);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, [runId, running]);
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
@@ -139,13 +174,14 @@ export function Home() {
   };
 
   const needsLogin = status === "NEED_LOGIN" && !!viewUrl;
+  const orderedSteps = steps.slice().reverse();
 
   return (
     <div class="home">
       <section class="hero">
         <div>
-          <p class="eyebrow">Remote Browser + MCP Agent</p>
-          <h1>Find team notes with natural language.</h1>
+          <p class="eyebrow">Remote Browser + MCP Agent Demo by Hanny</p>
+          <h1>Find XHS notes with natural language.</h1>
           <p class="sub">
             Ask a question, login through the MCP session view, and get structured results back.
           </p>
@@ -163,7 +199,7 @@ export function Home() {
           <textarea
             value={query}
             onInput={(event) => setQuery((event.target as HTMLTextAreaElement).value)}
-            placeholder="Example: Find the best team notes about campus life"
+            placeholder="Example: 帮我在新加坡找一家好吃的湖南菜馆"
             rows={3}
           />
 
@@ -235,8 +271,8 @@ export function Home() {
         <div class="panel">
           <h2>Agent log</h2>
           <div class="log-list">
-            {steps.length === 0 && <div class="empty">No steps yet.</div>}
-            {steps.map((step) => (
+            {orderedSteps.length === 0 && <div class="empty">No steps yet.</div>}
+            {orderedSteps.map((step) => (
               <div key={`${step.ts}-${step.action}`} class={`log-item log-${step.status}`}>
                 <div class="log-head">
                   <span class="log-action">{step.action}</span>
