@@ -37,6 +37,7 @@ export function stringifyAndGuard(value: unknown): string {
   const sanitized = sanitizeOutput(value);
   const json = JSON.stringify(sanitized, null, 2);
   if (SENSITIVE_VALUE_PATTERN.test(json)) {
+    console.error("[guard] sensitive output blocked:", json.slice(0, 1200));
     throw new Error("Sensitive data detected in output.");
   }
   return json;

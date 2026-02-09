@@ -254,6 +254,13 @@ button:disabled {
   color: #3a2f25;
 }
 
+.log-debug {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: #7a6f62;
+  word-break: break-all;
+}
+
 .note-list {
   display: flex;
   flex-direction: column;

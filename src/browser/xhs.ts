@@ -9,36 +9,136 @@ const MAX_SCROLL_LIMIT = 10;
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
+const getActivePage = (session: Session): Page => {
+  const pages = session.context.pages().filter((p) => !p.isClosed());
+  if (pages.length === 0) return session.page;
+  const latest = pages[pages.length - 1] ?? session.page;
+  session.page = latest;
+  return latest;
+};
+
+type LoginSignals = {
+  avatarFound: boolean;
+  userLinkFound: boolean;
+  creatorButtonFound: boolean;
+  userMenuFound: boolean;
+  loginButtonFound: boolean;
+};
+
+const detectLoginSignals = async (page: Page): Promise<LoginSignals> => {
+  const script = String.raw`
+(() => {
+  const avatar = document.querySelector(
+    'img[class*="avatar"], img[alt*="头像"], [class*="avatar"], [aria-label*="头像"]'
+  );
+  const loginButtonFound = Array.from(document.querySelectorAll("a,button")).some((el) => {
+    const text = (el.textContent || "").trim();
+    return text.includes("登录") || text.includes("注册");
+  });
+  const userLinkFound = Array.from(
+    document.querySelectorAll('a[href^="/user/"], a[href*="/user/"]')
+  ).some((el) => {
+    const text = (el.textContent || "").trim();
+    return text.length > 0 || !!el.querySelector("img");
+  });
+  const creatorButtonFound = Array.from(document.querySelectorAll("a,button")).some((el) => {
+    const text = (el.textContent || "").trim();
+    return text.includes("发布") || text.includes("创作") || text.includes("笔记");
+  });
+  const userMenuFound = Boolean(
+    document.querySelector('[class*="user"], [class*="profile"], [aria-label*="个人"], [data-testid*="user"]')
+  );
+  return {
+    avatarFound: Boolean(avatar),
+    userLinkFound,
+    creatorButtonFound,
+    userMenuFound,
+    loginButtonFound
+  };
+})()
+`;
+  return page.evaluate(script);
+};
+
 export async function detectLogin(page: Page): Promise<boolean> {
   try {
-    const script = String.raw`(() => {
-      const avatar = document.querySelector(
-        'img[class*="avatar"], img[alt*="头像"], [class*="avatar"]'
-      );
-      const loginButton = Array.from(document.querySelectorAll("a,button")).some((el) => {
-        const text = (el.textContent || "").trim();
-        return text.includes("登录") || text.includes("注册");
-      });
-      return Boolean(avatar) && !loginButton;
-    })`;
-    return await page.evaluate(script);
+    const signals = await detectLoginSignals(page);
+    return (
+      !signals.loginButtonFound &&
+      (signals.avatarFound || signals.userLinkFound || signals.creatorButtonFound || signals.userMenuFound)
+    );
   } catch {
     return false;
   }
 }
 
-export async function waitForLogin(session: Session, timeoutSec: number): Promise<ToolStatus> {
-  const page = session.page;
-  const loggedIn = await detectLogin(page);
-  if (loggedIn) return "READY";
-  if (timeoutSec <= 0) return "NEED_LOGIN";
+export async function waitForLogin(
+  session: Session,
+  timeoutSec: number
+): Promise<{
+  status: ToolStatus;
+  debug?: { url: string; signals: LoginSignals; pages: number };
+}> {
+  let page = getActivePage(session);
+  const ensureLanding = async () => {
+    try {
+      page = getActivePage(session);
+      if (!page.url().includes("/explore")) {
+        await page.goto(`${config.xhsBaseUrl}/explore`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(800);
+      }
+    } catch {
+      // ignore navigation errors for login checks
+    }
+  };
+
+  await ensureLanding();
+  const signals =
+    (await detectLoginSignals(page).catch(() => null)) ?? {
+      avatarFound: false,
+      userLinkFound: false,
+      creatorButtonFound: false,
+      userMenuFound: false,
+      loginButtonFound: true
+    };
+  const loggedIn =
+    !signals.loginButtonFound &&
+    (signals.avatarFound || signals.userLinkFound || signals.creatorButtonFound || signals.userMenuFound);
+  if (loggedIn) return { status: "READY", debug: { url: page.url(), signals, pages: session.context.pages().length } };
+  if (timeoutSec <= 0)
+    return { status: "NEED_LOGIN", debug: { url: page.url(), signals, pages: session.context.pages().length } };
 
   const deadline = Date.now() + timeoutSec * 1000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(1000);
-    if (await detectLogin(page)) return "READY";
+    await ensureLanding();
+    const loopSignals =
+      (await detectLoginSignals(page).catch(() => null)) ?? {
+        avatarFound: false,
+        userLinkFound: false,
+        creatorButtonFound: false,
+        userMenuFound: false,
+        loginButtonFound: true
+      };
+    const loopLoggedIn =
+      !loopSignals.loginButtonFound &&
+      (loopSignals.avatarFound ||
+        loopSignals.userLinkFound ||
+        loopSignals.creatorButtonFound ||
+        loopSignals.userMenuFound);
+    if (loopLoggedIn) {
+      return { status: "READY", debug: { url: page.url(), signals: loopSignals, pages: session.context.pages().length } };
+    }
   }
-  return "TIMEOUT";
+  const finalSignals =
+    (await detectLoginSignals(page).catch(() => null)) ?? {
+      avatarFound: false,
+      userLinkFound: false,
+      creatorButtonFound: false,
+      userMenuFound: false,
+      loginButtonFound: true
+    };
+  return { status: "TIMEOUT", debug: { url: page.url(), signals: finalSignals, pages: session.context.pages().length } };
 }
 
 export async function xhsSearch(
@@ -47,7 +147,7 @@ export async function xhsSearch(
   maxNotes: number,
   scrollTimes: number
 ): Promise<{ status: ToolStatus; notes: Note[] }> {
-  const page = session.page;
+  const page = getActivePage(session);
   const loggedIn = await detectLogin(page);
   if (!loggedIn) return { status: "NEED_LOGIN", notes: [] };
 
@@ -66,121 +166,133 @@ export async function xhsSearch(
     await page.waitForTimeout(1000);
   }
 
-  const script = String.raw`(maxCount) => {
-    const normalize = (text) => text.replace(/\\s+/g, " ").trim();
-    const trimTo = (text, maxLen) => (text.length > maxLen ? text.slice(0, maxLen).trim() : text);
+  const script = String.raw`
+(() => {
+  const maxCount = ${max};
+  const normalize = (text) => text.replace(/\\s+/g, " ").trim();
+  const trimTo = (text, maxLen) => {
+    if (text.length > maxLen) return text.slice(0, maxLen).trim();
+    return text;
+  };
 
-    const parseCount = (value) => {
-      const match = value.match(/([0-9]+(?:\\.[0-9]+)?)(万)?/);
-      if (!match) return null;
-      const num = Number.parseFloat(match[1] || "");
-      if (!Number.isFinite(num)) return null;
-      return Math.round(match[2] ? num * 10000 : num);
-    };
+  const parseCount = (value) => {
+    const match = value.match(/[0-9.]+/);
+    if (!match) return null;
+    const num = Number.parseFloat(match[0]);
+    if (!Number.isFinite(num)) return null;
+    const hasWan = value.includes("万");
+    return Math.round(hasWan ? num * 10000 : num);
+  };
 
-    const findCount = (text, labels) => {
-      const lines = text.split(/\\n|\\r|\\t|·|•/).map((line) => line.trim());
-      for (const label of labels) {
-        for (const line of lines) {
-          if (!line.includes(label)) continue;
-          let match = line.match(new RegExp(label + "\\\\s*([0-9]+(?:\\\\.[0-9]+)?)(万)?"));
-          if (!match) {
-            match = line.match(new RegExp("([0-9]+(?:\\\\.[0-9]+)?)(万)?\\\\s*" + label));
-          }
-          if (match) {
-            const count = parseCount(match[0]);
-            if (count !== null) return count;
-          }
-        }
+  const findCount = (text, labels) => {
+    const lines = text.split(/\\n|\\r|\\t|·|•/).map((line) => line.trim());
+    for (const label of labels) {
+      for (const line of lines) {
+        if (!line.includes(label)) continue;
+        const count = parseCount(line);
+        if (count !== null) return count;
       }
-      return null;
-    };
-
-    const pickTitle = (card, link) => {
-      const candidates = [];
-      if (card) {
-        candidates.push(...Array.from(card.querySelectorAll("h1,h2,h3,h4")));
-        candidates.push(...Array.from(card.querySelectorAll("span")));
-      }
-      candidates.push(link);
-      for (const el of candidates) {
-        const text = normalize(el.textContent || "");
-        if (text.length >= 2 && text.length <= 80) return trimTo(text, 80);
-      }
-      return "";
-    };
-
-    const pickDesc = (card) => {
-      if (!card) return "";
-      const paragraphs = Array.from(card.querySelectorAll("p"));
-      for (const el of paragraphs) {
-        const text = normalize(el.textContent || "");
-        if (text.length >= 2) return trimTo(text, 140);
-      }
-      return "";
-    };
-
-    const pickAuthor = (card) => {
-      if (!card) return "";
-      const authorLink = card.querySelector('a[href*="/user/"]');
-      const text = normalize((authorLink && authorLink.textContent) || "");
-      if (text && text.length <= 40) return trimTo(text, 40);
-      const fallback = card.querySelector('[class*="author"], [class*="user"]');
-      const fallbackText = normalize((fallback && fallback.textContent) || "");
-      if (fallbackText && fallbackText.length <= 40) return trimTo(fallbackText, 40);
-      return "";
-    };
-
-    const anchors = Array.from(
-      document.querySelectorAll('a[href*="/explore/"], a[href*="/discovery/item/"]')
-    );
-    const results = [];
-    const seen = new Set();
-
-    for (const link of anchors) {
-      const href = link.getAttribute("href") || "";
-      const match = href.match(/\\/(?:explore|discovery\\/item)\\/([0-9a-zA-Z]+)/);
-      if (!match) continue;
-      const id = match[1];
-      if (seen.has(id)) continue;
-      seen.add(id);
-
-      const url = href.startsWith("http") ? href : `${location.origin}${href}`;
-      const card = link.closest("section, article, div");
-      const cardText = normalize((card && card.textContent) || "");
-
-      const title = pickTitle(card, link);
-      const desc = pickDesc(card);
-      const author = pickAuthor(card);
-
-      const liked = findCount(cardText, ["赞", "点赞"]);
-      const collected = findCount(cardText, ["收藏"]);
-      const comments = findCount(cardText, ["评论"]);
-      const shared = findCount(cardText, ["分享"]);
-
-      results.push({
-        id,
-        url,
-        title: title || null,
-        desc: desc || null,
-        author: author || null,
-        snippet: desc || title || null,
-        liked_count: liked,
-        collected_count: collected,
-        comments_count: comments,
-        shared_count: shared,
-        publish_time: null,
-        images_list: null,
-        comments: null
-      });
-
-      if (results.length >= maxCount) break;
     }
+    return null;
+  };
 
-    return results;
-  }`;
+  const pickTitle = (card, link) => {
+    const candidates = [];
+    if (card) {
+      candidates.push(...Array.from(card.querySelectorAll("h1,h2,h3,h4")));
+      candidates.push(...Array.from(card.querySelectorAll("span")));
+    }
+    candidates.push(link);
+    for (const el of candidates) {
+      const text = normalize(el.textContent || "");
+      if (text.length >= 2 && text.length <= 80) return trimTo(text, 80);
+    }
+    return "";
+  };
 
-  const notes = await page.evaluate(script, max);
+  const pickDesc = (card) => {
+    if (!card) return "";
+    const paragraphs = Array.from(card.querySelectorAll("p"));
+    for (const el of paragraphs) {
+      const text = normalize(el.textContent || "");
+      if (text.length >= 2) return trimTo(text, 140);
+    }
+    return "";
+  };
+
+  const pickAuthor = (card) => {
+    if (!card) return "";
+    const authorLink = card.querySelector('a[href*="/user/"]');
+    const text = normalize((authorLink && authorLink.textContent) || "");
+    if (text && text.length <= 40) return trimTo(text, 40);
+    const fallback = card.querySelector('[class*="author"], [class*="user"]');
+    const fallbackText = normalize((fallback && fallback.textContent) || "");
+    if (fallbackText && fallbackText.length <= 40) return trimTo(fallbackText, 40);
+    return "";
+  };
+
+  const anchors = Array.from(
+    document.querySelectorAll('a[href*="/explore/"], a[href*="/discovery/item/"]')
+  );
+  const results = [];
+  const seen = new Set();
+
+  const extractId = (href) => {
+    if (href.includes("/explore/")) {
+      const part = href.split("/explore/")[1] || "";
+      return part.split("?")[0].split("#")[0];
+    }
+    if (href.includes("/discovery/item/")) {
+      const part = href.split("/discovery/item/")[1] || "";
+      return part.split("?")[0].split("#")[0];
+    }
+    return "";
+  };
+
+  for (const link of anchors) {
+    const href = link.getAttribute("href") || "";
+    const id = extractId(href);
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const url = href.startsWith("http") ? href : location.origin + href;
+    const card = link.closest("section, article, div");
+    const cardText = normalize((card && card.textContent) || "");
+
+    const title = pickTitle(card, link);
+    const desc = pickDesc(card);
+    const author = pickAuthor(card);
+
+    const liked = findCount(cardText, ["赞", "点赞"]);
+    const collected = findCount(cardText, ["收藏"]);
+    const comments = findCount(cardText, ["评论"]);
+    const shared = findCount(cardText, ["分享"]);
+
+    results.push({
+      id,
+      url,
+      title: title || null,
+      desc: desc || null,
+      author: author || null,
+      snippet: desc || title || null,
+      liked_count: liked,
+      collected_count: collected,
+      comments_count: comments,
+      shared_count: shared,
+      publish_time: null,
+      images_list: null,
+      comments: null
+    });
+
+    if (results.length >= maxCount) break;
+  }
+
+  return results;
+})()
+`;
+
+  const notes = await page.evaluate(script);
 
   return { status: "READY", notes };
 }

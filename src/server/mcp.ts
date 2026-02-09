@@ -110,9 +110,9 @@ export function createMcpServer() {
         const timeoutSec = getOptionalNumber(args.timeoutSec, 120);
         const session = sessionManager.requireSession(sessionId);
         sessionManager.touch(sessionId);
-        const status = await waitForLogin(session, timeoutSec);
+        const result = await waitForLogin(session, timeoutSec);
         await auditLog("wait_for_login", sessionId);
-        return respondJson({ status });
+        return respondJson(result);
       }
       case "xhs_search": {
         const sessionId = requireString(args.sessionId, "sessionId");

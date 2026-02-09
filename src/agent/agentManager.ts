@@ -191,7 +191,10 @@ export class AgentManager {
     }
 
     try {
-      const data = await this.mcpClient.callTool<{ status: string }>("wait_for_login", {
+      const data = await this.mcpClient.callTool<{
+        status: string;
+        debug?: { url: string; signals: Record<string, boolean>; pages: number };
+      }>("wait_for_login", {
         sessionId: run.sessionId,
         timeoutSec: run.options.loginTimeoutSec
       });
@@ -203,7 +206,7 @@ export class AgentManager {
           state: run.state,
           action: "wait_for_login",
           status: "ok",
-          detail: { status }
+          detail: { status, debug: data.debug }
         });
         return;
       }
@@ -213,7 +216,7 @@ export class AgentManager {
         state: run.state,
         action: "wait_for_login",
         status: "waiting",
-        detail: { status, viewUrl: run.viewUrl }
+        detail: { status, viewUrl: run.viewUrl, debug: data.debug }
       });
     } catch (err) {
       run.state = "ERROR";

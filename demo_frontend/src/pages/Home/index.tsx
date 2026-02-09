@@ -7,7 +7,12 @@ type AgentStep = {
   action: string;
   status: string;
   summary?: string | null;
-  detail?: Record<string, unknown> | null;
+  detail?: {
+    debug?: {
+      url?: string;
+      signals?: Record<string, boolean>;
+    };
+  } | null;
 };
 
 type Note = {
@@ -57,7 +62,7 @@ const postJson = async (url: string, body: Record<string, unknown>) => {
 
 export function Home() {
   const [query, setQuery] = useState("");
-  const [maxNotes, setMaxNotes] = useState(10);
+  const [maxNotes, setMaxNotes] = useState(8);
   const [scrollTimes, setScrollTimes] = useState(2);
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -114,7 +119,7 @@ export function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 8 });
+      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 25 });
       applyRun(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Continue failed");
@@ -240,6 +245,12 @@ export function Home() {
                 </div>
                 <div class="log-body">
                   <p>{step.summary ?? "Waiting for update."}</p>
+                  {step.detail?.debug && (
+                    <p class="log-debug">
+                      Debug: {step.detail.debug.url ?? "--"} · signals{" "}
+                      {JSON.stringify(step.detail.debug.signals)}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
