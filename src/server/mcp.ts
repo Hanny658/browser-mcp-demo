@@ -4,7 +4,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { sessionManager } from "../browser/sessionManager.js";
 import { waitForLogin, xhsOpenAndExtract, xhsSearch } from "../browser/xhs.js";
 import { auditLog, stringifyAndGuard } from "../security/policy.js";
-import { buildViewUrl } from "./http.js";
+import { buildViewUrl } from "./viewUrl.js";
 
 const tools = [
   {
@@ -87,7 +87,7 @@ const getOptionalNumber = (value: unknown, fallback: number) => {
   return fallback;
 };
 
-export async function startMcpServer(): Promise<void> {
+export function createMcpServer() {
   const server = new Server(
     { name: "xhs-remote-browser-mcp", version: "0.1.0" },
     { capabilities: { tools: {} } }
@@ -145,6 +145,11 @@ export async function startMcpServer(): Promise<void> {
     }
   });
 
+  return server;
+}
+
+export async function startMcpServer(): Promise<void> {
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[mcp] stdio transport ready");

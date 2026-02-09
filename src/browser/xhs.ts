@@ -11,7 +11,7 @@ const clamp = (value: number, min: number, max: number) =>
 
 export async function detectLogin(page: Page): Promise<boolean> {
   try {
-    return await page.evaluate(() => {
+    const script = String.raw`(() => {
       const avatar = document.querySelector(
         'img[class*="avatar"], img[alt*="头像"], [class*="avatar"]'
       );
@@ -20,7 +20,8 @@ export async function detectLogin(page: Page): Promise<boolean> {
         return text.includes("登录") || text.includes("注册");
       });
       return Boolean(avatar) && !loginButton;
-    });
+    })`;
+    return await page.evaluate(script);
   } catch {
     return false;
   }
@@ -65,27 +66,26 @@ export async function xhsSearch(
     await page.waitForTimeout(1000);
   }
 
-  const notes = await page.evaluate((maxCount) => {
-    const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
-    const trimTo = (text: string, maxLen: number) =>
-      text.length > maxLen ? text.slice(0, maxLen).trim() : text;
+  const script = String.raw`(maxCount) => {
+    const normalize = (text) => text.replace(/\\s+/g, " ").trim();
+    const trimTo = (text, maxLen) => (text.length > maxLen ? text.slice(0, maxLen).trim() : text);
 
-    const parseCount = (value: string) => {
-      const match = value.match(/([0-9]+(?:\.[0-9]+)?)(万)?/);
+    const parseCount = (value) => {
+      const match = value.match(/([0-9]+(?:\\.[0-9]+)?)(万)?/);
       if (!match) return null;
       const num = Number.parseFloat(match[1] || "");
       if (!Number.isFinite(num)) return null;
       return Math.round(match[2] ? num * 10000 : num);
     };
 
-    const findCount = (text: string, labels: string[]) => {
-      const lines = text.split(/\n|\r|\t|·|•/).map((line) => line.trim());
+    const findCount = (text, labels) => {
+      const lines = text.split(/\\n|\\r|\\t|·|•/).map((line) => line.trim());
       for (const label of labels) {
         for (const line of lines) {
           if (!line.includes(label)) continue;
-          let match = line.match(new RegExp(`${label}\\s*([0-9]+(?:\\.[0-9]+)?)(万)?`));
+          let match = line.match(new RegExp(label + "\\\\s*([0-9]+(?:\\\\.[0-9]+)?)(万)?"));
           if (!match) {
-            match = line.match(new RegExp(`([0-9]+(?:\\.[0-9]+)?)(万)?\\s*${label}`));
+            match = line.match(new RegExp("([0-9]+(?:\\\\.[0-9]+)?)(万)?\\\\s*" + label));
           }
           if (match) {
             const count = parseCount(match[0]);
@@ -96,8 +96,8 @@ export async function xhsSearch(
       return null;
     };
 
-    const pickTitle = (card: Element | null, link: HTMLAnchorElement) => {
-      const candidates: Element[] = [];
+    const pickTitle = (card, link) => {
+      const candidates = [];
       if (card) {
         candidates.push(...Array.from(card.querySelectorAll("h1,h2,h3,h4")));
         candidates.push(...Array.from(card.querySelectorAll("span")));
@@ -110,7 +110,7 @@ export async function xhsSearch(
       return "";
     };
 
-    const pickDesc = (card: Element | null) => {
+    const pickDesc = (card) => {
       if (!card) return "";
       const paragraphs = Array.from(card.querySelectorAll("p"));
       for (const el of paragraphs) {
@@ -120,34 +120,34 @@ export async function xhsSearch(
       return "";
     };
 
-    const pickAuthor = (card: Element | null) => {
+    const pickAuthor = (card) => {
       if (!card) return "";
       const authorLink = card.querySelector('a[href*="/user/"]');
-      const text = normalize(authorLink?.textContent || "");
+      const text = normalize((authorLink && authorLink.textContent) || "");
       if (text && text.length <= 40) return trimTo(text, 40);
       const fallback = card.querySelector('[class*="author"], [class*="user"]');
-      const fallbackText = normalize(fallback?.textContent || "");
+      const fallbackText = normalize((fallback && fallback.textContent) || "");
       if (fallbackText && fallbackText.length <= 40) return trimTo(fallbackText, 40);
       return "";
     };
 
     const anchors = Array.from(
       document.querySelectorAll('a[href*="/explore/"], a[href*="/discovery/item/"]')
-    ) as HTMLAnchorElement[];
-    const results: any[] = [];
-    const seen = new Set<string>();
+    );
+    const results = [];
+    const seen = new Set();
 
     for (const link of anchors) {
       const href = link.getAttribute("href") || "";
-      const match = href.match(/\/(?:explore|discovery\/item)\/([0-9a-zA-Z]+)/);
+      const match = href.match(/\\/(?:explore|discovery\\/item)\\/([0-9a-zA-Z]+)/);
       if (!match) continue;
       const id = match[1];
-      if (seen.has(id || "")) continue;
-      seen.add(id || "");
+      if (seen.has(id)) continue;
+      seen.add(id);
 
       const url = href.startsWith("http") ? href : `${location.origin}${href}`;
       const card = link.closest("section, article, div");
-      const cardText = normalize(card?.textContent || "");
+      const cardText = normalize((card && card.textContent) || "");
 
       const title = pickTitle(card, link);
       const desc = pickDesc(card);
@@ -178,7 +178,9 @@ export async function xhsSearch(
     }
 
     return results;
-  }, max);
+  }`;
+
+  const notes = await page.evaluate(script, max);
 
   return { status: "READY", notes };
 }
@@ -187,5 +189,7 @@ export async function xhsOpenAndExtract(
   _session: Session,
   _url: string
 ): Promise<{ status: ToolStatus; note: Note | null }> {
+  void _session;
+  void _url;
   return { status: "NOT_IMPLEMENTED", note: null };
 }

@@ -1,9 +1,11 @@
 import { startHttpServer } from "./server/http.js";
 import { startMcpServer } from "./server/mcp.js";
 import { sessionManager } from "./browser/sessionManager.js";
+import { agentManager } from "./agent/agentManager.js";
 
 async function main() {
   sessionManager.startJanitor();
+  agentManager.startJanitor();
   await startHttpServer();
   await startMcpServer();
 }

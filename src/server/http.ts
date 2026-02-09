@@ -3,16 +3,8 @@ import type { Server } from "http";
 import { config } from "../config.js";
 import { sessionManager } from "../browser/sessionManager.js";
 import { sanitizeOutput } from "../security/policy.js";
-
-const buildBaseUrl = () => {
-  if (config.publicBaseUrl) return config.publicBaseUrl;
-  return `http://${config.host}:${config.port}`;
-};
-
-export const buildViewUrl = (sessionId: string) => {
-  const base = buildBaseUrl().replace(/\/+$/, "");
-  return `${base}/session/view/${sessionId}`;
-};
+import { buildViewUrl } from "./viewUrl.js";
+import { agentManager } from "../agent/agentManager.js";
 
 const renderViewPage = (sessionId: string) => {
   const safeId = sessionId.replace(/[^a-zA-Z0-9-]/g, "");
@@ -71,6 +63,57 @@ export async function startHttpServer(): Promise<Server> {
   app.post("/session/:id/destroy", async (req, res) => {
     const ok = await sessionManager.destroySession(req.params.id);
     res.json({ ok });
+  });
+
+  app.post("/agent/run", async (req, res) => {
+    try {
+      const query = typeof req.body?.query === "string" ? req.body.query.trim() : "";
+      if (!query) {
+        res.status(400).json({ error: "QUERY_REQUIRED" });
+        return;
+      }
+      const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : undefined;
+      const maxNotes = typeof req.body?.maxNotes === "number" ? req.body.maxNotes : undefined;
+      const scrollTimes = typeof req.body?.scrollTimes === "number" ? req.body.scrollTimes : undefined;
+      const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
+
+      const run = await agentManager.createRun({
+        query,
+        sessionId,
+        maxNotes,
+        scrollTimes,
+        loginTimeoutSec
+      });
+      res.json(sanitizeOutput(agentManager.toPublicRun(run)));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "UNKNOWN_ERROR";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/agent/continue", async (req, res) => {
+    try {
+      const runId = typeof req.body?.runId === "string" ? req.body.runId.trim() : "";
+      if (!runId) {
+        res.status(400).json({ error: "RUN_ID_REQUIRED" });
+        return;
+      }
+      const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
+      const run = await agentManager.advanceRun(runId, { loginTimeoutSec });
+      res.json(sanitizeOutput(agentManager.toPublicRun(run)));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "UNKNOWN_ERROR";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/agent/run/:id", (req, res) => {
+    const run = agentManager.getRun(req.params.id);
+    if (!run) {
+      res.status(404).json({ error: "RUN_NOT_FOUND" });
+      return;
+    }
+    res.json(sanitizeOutput(agentManager.toPublicRun(run)));
   });
 
   return new Promise((resolve) => {

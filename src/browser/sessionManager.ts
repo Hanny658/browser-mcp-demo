@@ -74,7 +74,7 @@ export class SessionManager {
     if (session) session.lastActiveAt = Date.now();
   }
 
-  async destroySession(id: string, _reason = "manual"): Promise<boolean> {
+  async destroySession(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) return false;
     this.sessions.delete(id);
@@ -97,7 +97,7 @@ export class SessionManager {
     const now = Date.now();
     for (const session of this.sessions.values()) {
       if (now - session.lastActiveAt > config.sessionTtlMs) {
-        await this.destroySession(session.id, "ttl");
+        await this.destroySession(session.id);
       }
     }
   }
@@ -109,7 +109,7 @@ export class SessionManager {
     }
     const ids = Array.from(this.sessions.keys());
     for (const id of ids) {
-      await this.destroySession(id, "shutdown");
+      await this.destroySession(id);
     }
   }
 }

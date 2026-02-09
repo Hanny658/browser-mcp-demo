@@ -26,5 +26,8 @@ export const config = {
   xhsBaseUrl: process.env.XHS_BASE_URL ?? "https://www.xiaohongshu.com",
   auditLogPath: path.resolve(cwd, process.env.AUDIT_LOG_PATH ?? "./logs/audit.log"),
   mcpTransport: process.env.MCP_TRANSPORT ?? "stdio",
-  mcpHttpPort: parseIntSafe(process.env.MCP_HTTP_PORT, 3333)
+  mcpHttpPort: parseIntSafe(process.env.MCP_HTTP_PORT, 3333),
+  openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+  openaiModel: process.env.OPENAI_MODEL ?? "gpt-5-mini",
+  agentRunTtlMs: parseIntSafe(process.env.AGENT_RUN_TTL_MINUTES, 60) * 60 * 1000
 };
