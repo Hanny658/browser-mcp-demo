@@ -4,6 +4,7 @@ import { sanitizeOutput } from "../security/policy.js";
 import { buildViewUrl } from "../server/viewUrl.js";
 import { McpInProcessClient } from "./mcpClient.js";
 import { AgentNarrator } from "./narrator.js";
+import { AgentKeyworder } from "./keyworder.js";
 import type { AgentRun, AgentRunInput, AgentStep } from "./types.js";
 import type { Note } from "../types.js";
 
@@ -17,6 +18,8 @@ export class AgentManager {
   private janitor?: NodeJS.Timeout;
   private mcpClient = new McpInProcessClient();
   private narrator = new AgentNarrator();
+  private keyworder = new AgentKeyworder();
+  private running = new Set<string>();
 
   startJanitor(): void {
     if (this.janitor) return;
@@ -40,6 +43,7 @@ export class AgentManager {
     return sanitizeOutput({
       runId: run.id,
       status: run.state,
+      running: this.running.has(run.id),
       sessionId: run.sessionId,
       viewUrl: run.viewUrl,
       query: run.query,
@@ -87,7 +91,7 @@ export class AgentManager {
     }
 
     run.updatedAt = Date.now();
-    await this.runLoop(run);
+    this.scheduleRun(run);
     return run;
   }
 
@@ -121,6 +125,18 @@ export class AgentManager {
 
       return;
     }
+  }
+
+  private scheduleRun(run: AgentRun): void {
+    if (this.running.has(run.id)) return;
+    this.running.add(run.id);
+    void (async () => {
+      try {
+        await this.runLoop(run);
+      } finally {
+        this.running.delete(run.id);
+      }
+    })();
   }
 
   private async pushStep(run: AgentRun, step: AgentStep): Promise<void> {
@@ -246,9 +262,22 @@ export class AgentManager {
     }
 
     try {
+      if (!run.searchQuery) {
+        const result = await this.keyworder.extract(run.query);
+        run.keywordCandidates = result.queries;
+        run.searchQuery = result.queries[0] ?? run.query;
+        await this.pushStep(run, {
+          ts: new Date().toISOString(),
+          state: run.state,
+          action: "keyword_extract",
+          status: "ok",
+          detail: { count: result.queries.length, method: result.method, reason: result.reason ?? null }
+        });
+      }
+
       const data = await this.mcpClient.callTool<{ status: string; notes: Note[] }>("xhs_search", {
         sessionId: run.sessionId,
-        query: run.query,
+        query: run.searchQuery ?? run.query,
         maxNotes: run.options.maxNotes,
         scrollTimes: run.options.scrollTimes
       });

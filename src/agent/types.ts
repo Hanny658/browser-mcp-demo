@@ -23,6 +23,8 @@ export interface AgentRun {
   id: string;
   state: AgentState;
   query: string;
+  searchQuery?: string;
+  keywordCandidates?: string[];
   sessionId?: string;
   viewUrl?: string;
   notes?: Note[];

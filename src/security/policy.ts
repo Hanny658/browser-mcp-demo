@@ -34,11 +34,26 @@ export function sanitizeOutput<T>(value: T): T {
 }
 
 export function stringifyAndGuard(value: unknown): string {
-  const sanitized = sanitizeOutput(value);
-  const json = JSON.stringify(sanitized, null, 2);
+  let sanitized = sanitizeOutput(value);
+  let json = JSON.stringify(sanitized, null, 2);
   if (SENSITIVE_VALUE_PATTERN.test(json)) {
-    console.error("[guard] sensitive output blocked:", json.slice(0, 1200));
-    throw new Error("Sensitive data detected in output.");
+    if (sanitized && typeof sanitized === "object" && !Array.isArray(sanitized)) {
+      const container = sanitized as Record<string, unknown>;
+      const notes = Array.isArray(container.notes) ? container.notes : null;
+      if (notes) {
+        const filtered = notes.filter((note) => {
+          const noteJson = JSON.stringify(note ?? {});
+          return !SENSITIVE_VALUE_PATTERN.test(noteJson);
+        });
+        container.notes = filtered;
+        sanitized = container;
+        json = JSON.stringify(sanitized, null, 2);
+      }
+    }
+    if (SENSITIVE_VALUE_PATTERN.test(json)) {
+      console.error("[guard] sensitive output blocked:", json.slice(0, 1200));
+      throw new Error("Sensitive data detected in output.");
+    }
   }
   return json;
 }

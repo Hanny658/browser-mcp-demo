@@ -159,11 +159,25 @@ export async function xhsSearch(
 
   const url = `${config.xhsBaseUrl}/search_result?keyword=${encodeURIComponent(safeQuery)}`;
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(1500);
+  const resultSelector = 'a[href*="/explore/"], a[href*="/discovery/item/"]';
+  try {
+    await page.waitForSelector(resultSelector, { timeout: 8000 });
+  } catch {
+    // ignore if no results yet
+  }
+
+  const resultLocator = page.locator(resultSelector);
+  let lastCount = await resultLocator.count();
 
   for (let i = 0; i < scrolls; i += 1) {
     await page.mouse.wheel(0, 2400);
     await page.waitForTimeout(1000);
+    const count = await resultLocator.count();
+    if (count === lastCount) {
+      await page.waitForTimeout(800);
+    }
+    lastCount = count;
   }
 
   const script = String.raw`
