@@ -23,6 +23,8 @@ export interface Note {
   publish_time?: string | null;
   images_list?: string[] | null;
   comments?: CommentNode[] | null;
+  rating?: number | null;
+  location?: string | null;
 }
 
 export interface SearchResult {

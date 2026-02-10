@@ -1,4 +1,5 @@
 import type { Note } from "../types.js";
+import type { SiteId } from "../sites/types.js";
 
 export type AgentState = "INIT" | "NEED_LOGIN" | "READY" | "DONE" | "ERROR";
 
@@ -8,6 +9,7 @@ export interface AgentRunInput {
   maxNotes?: number;
   scrollTimes?: number;
   loginTimeoutSec?: number;
+  site?: SiteId;
 }
 
 export interface AgentStep {
@@ -27,6 +29,7 @@ export interface AgentRun {
   keywordCandidates?: string[] | undefined;
   sessionId?: string | undefined;
   viewUrl?: string | undefined;
+  site: SiteId;
   notes?: Note[] | undefined;
   createdAt: number;
   updatedAt: number;

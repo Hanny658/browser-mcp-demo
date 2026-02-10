@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { sessionManager } from "../browser/sessionManager.js";
-import { waitForLogin, xhsOpenAndExtract, xhsSearch } from "../browser/xhs.js";
+import { getAdapter, normalizeSite } from "../sites/registry.js";
 import { auditLog, stringifyAndGuard } from "../security/policy.js";
 import { buildViewUrl } from "./viewUrl.js";
 
@@ -14,27 +14,29 @@ const tools = [
   },
   {
     name: "wait_for_login",
-    description: "Poll login status for a session.",
+    description: "Poll login status for a session (site-specific when provided).",
     inputSchema: {
       type: "object",
       properties: {
         sessionId: { type: "string" },
-        timeoutSec: { type: "number" }
+        timeoutSec: { type: "number" },
+        site: { type: "string" }
       },
       required: ["sessionId"],
       additionalProperties: false
     }
   },
   {
-    name: "xhs_search",
-    description: "Search XHS and return a list of notes.",
+    name: "platform_search",
+    description: "Search a site and return a list of notes.",
     inputSchema: {
       type: "object",
       properties: {
         sessionId: { type: "string" },
         query: { type: "string" },
         maxNotes: { type: "number" },
-        scrollTimes: { type: "number" }
+        scrollTimes: { type: "number" },
+        site: { type: "string" }
       },
       required: ["sessionId", "query"],
       additionalProperties: false
@@ -42,12 +44,13 @@ const tools = [
   },
   {
     name: "xhs_open_and_extract",
-    description: "Open a note and extract full detail (stub for MVP).",
+    description: "Open a note and extract full detail (site-specific).",
     inputSchema: {
       type: "object",
       properties: {
         sessionId: { type: "string" },
-        url: { type: "string" }
+        url: { type: "string" },
+        site: { type: "string" }
       },
       required: ["sessionId", "url"],
       additionalProperties: false
@@ -110,19 +113,23 @@ export function createMcpServer() {
         const timeoutSec = getOptionalNumber(args.timeoutSec, 120);
         const session = sessionManager.requireSession(sessionId);
         sessionManager.touch(sessionId);
-        const result = await waitForLogin(session, timeoutSec);
+        const site = normalizeSite(typeof args.site === "string" ? args.site : undefined);
+        const adapter = getAdapter(site);
+        const result = await adapter.waitForLogin(session, timeoutSec);
         await auditLog("wait_for_login", sessionId);
         return respondJson(result);
       }
-      case "xhs_search": {
+      case "platform_search": {
         const sessionId = requireString(args.sessionId, "sessionId");
         const query = requireString(args.query, "query");
         const maxNotes = getOptionalNumber(args.maxNotes, 20);
         const scrollTimes = getOptionalNumber(args.scrollTimes, 2);
         const session = sessionManager.requireSession(sessionId);
         sessionManager.touch(sessionId);
-        const result = await xhsSearch(session, query, maxNotes, scrollTimes);
-        await auditLog("xhs_search", sessionId, { keyword: query });
+        const site = normalizeSite(typeof args.site === "string" ? args.site : undefined);
+        const adapter = getAdapter(site);
+        const result = await adapter.search(session, query, maxNotes, scrollTimes);
+        await auditLog("platform_search", sessionId, { keyword: query });
         return respondJson(result);
       }
       case "xhs_open_and_extract": {
@@ -130,7 +137,9 @@ export function createMcpServer() {
         const url = requireString(args.url, "url");
         const session = sessionManager.requireSession(sessionId);
         sessionManager.touch(sessionId);
-        const result = await xhsOpenAndExtract(session, url);
+        const site = normalizeSite(typeof args.site === "string" ? args.site : undefined);
+        const adapter = getAdapter(site);
+        const result = await adapter.openAndExtract(session, url);
         await auditLog("xhs_open_and_extract", sessionId, { noteUrl: url });
         return respondJson(result);
       }

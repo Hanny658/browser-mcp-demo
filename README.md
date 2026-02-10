@@ -1,6 +1,6 @@
-# XHS Remote Browser + MCP Tool Gateway (MVP)
+# Remote Browser + MCP Tool Gateway (Multi-Site MVP)
 
-This project provides a minimal HITL (human-in-the-loop) remote browser session for XHS login and an MCP tool gateway for restricted search and extraction.
+This project provides a minimal HITL (human-in-the-loop) remote browser session and an MCP tool gateway for restricted search/extraction. It currently supports XHS and includes stub adapters for Yelp and TripAdvisor.
 
 ## Requirements
 - Node.js >= 18
@@ -30,15 +30,15 @@ This starts:
 1. Call MCP tool `create_session` -> `{ sessionId, viewUrl }`
 2. Open `viewUrl` in your browser. A local Chromium window is opened for login.
 3. Login on that window (QR/OTP/2FA handled by the user).
-4. Call `wait_for_login` until status is `READY`.
+4. Call `wait_for_login` until status is `READY` (site-aware when `site` is provided).
 
 ## MCP Tools (stdio)
 Tools:
-- `create_session`
-- `wait_for_login`
-- `xhs_search`
-- `xhs_open_and_extract` (stub for detail extraction)
-- `destroy_session`
+ - `create_session`
+ - `wait_for_login` (optional `site`)
+ - `xhs_search` (site-aware via `site` param)
+ - `xhs_open_and_extract` (site-aware via `site` param)
+ - `destroy_session`
 
 Example (pseudo):
 ```ts
@@ -48,7 +48,8 @@ const results = await client.callTool("xhs_search", {
   sessionId: session.sessionId,
   query: "camping",
   maxNotes: 10,
-  scrollTimes: 2
+  scrollTimes: 2,
+  site: "xhs" // xhs | yelp | tripadvisor
 });
 ```
 
@@ -59,16 +60,17 @@ const results = await client.callTool("xhs_search", {
 - Audit log is written to `logs/audit.log` with redaction.
 
 ## Agent HTTP Endpoints
-- `POST /agent/run` → start a run and execute until login required or done
-- `POST /agent/continue` → continue a run after user login
-- `GET /agent/run/:id` → fetch current run state
+ - `POST /agent/run` → start a run and execute until login required or done
+ - `POST /agent/continue` → continue a run after user login
+ - `GET /agent/run/:id` → fetch current run state
 
 Example request body:
 ```json
 {
   "query": "camping",
   "maxNotes": 10,
-  "scrollTimes": 2
+  "scrollTimes": 2,
+  "site": "xhs"
 }
 ```
 
@@ -84,5 +86,6 @@ Key environment variables:
 - `AUDIT_LOG_PATH`
 
 ## Notes
-- The DOM selectors for XHS may change. Update `src/browser/xhs.ts` if search extraction breaks.
-- This MVP does not implement large-scale crawling or anti-bot bypass.
+ - The XHS adapter is real; Yelp and TripAdvisor adapters are currently stub data.
+ - The DOM selectors for XHS may change. Update `src/browser/xhs.ts` if search extraction breaks.
+ - This MVP does not implement large-scale crawling or anti-bot bypass.

@@ -348,7 +348,9 @@ export async function xhsSearch(
       shared_count: shared,
       publish_time: null,
       images_list: null,
-      comments: null
+      comments: null,
+      rating: null,
+      location: null
     });
 
     if (results.length >= maxCount) break;

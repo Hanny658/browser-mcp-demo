@@ -11,6 +11,7 @@ export interface Session {
   userDataDir: string;
   createdAt: number;
   lastActiveAt: number;
+  // TODO: attach ownerId for per-user session isolation when auth is added.
 }
 
 export class SessionManager {

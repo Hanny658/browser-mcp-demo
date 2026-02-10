@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { config } from "../config.js";
 import { sanitizeOutput } from "../security/policy.js";
+import { normalizeSite } from "../sites/registry.js";
 import { buildViewUrl } from "../server/viewUrl.js";
 import { McpInProcessClient } from "./mcpClient.js";
 import { AgentNarrator } from "./narrator.js";
@@ -47,6 +48,7 @@ export class AgentManager {
       sessionId: run.sessionId,
       viewUrl: run.viewUrl,
       query: run.query,
+      site: run.site,
       notes: run.notes ?? [],
       steps: run.steps,
       error: run.error ?? null
@@ -59,6 +61,7 @@ export class AgentManager {
       state: "INIT",
       query: input.query.trim(),
       sessionId: input.sessionId?.trim(),
+      site: normalizeSite(input.site),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       steps: [],
@@ -80,6 +83,7 @@ export class AgentManager {
     const run = this.requireRun(runId);
     if (input?.query) run.query = input.query.trim();
     if (input?.sessionId) run.sessionId = input.sessionId.trim();
+    if (input?.site) run.site = normalizeSite(input.site);
     if (input?.maxNotes !== undefined && Number.isFinite(input.maxNotes)) {
       run.options.maxNotes = Math.max(1, Math.floor(input.maxNotes));
     }
@@ -211,7 +215,8 @@ export class AgentManager {
         debug?: { url: string; signals: Record<string, boolean>; pages: number };
       }>("wait_for_login", {
         sessionId: run.sessionId,
-        timeoutSec: run.options.loginTimeoutSec
+        timeoutSec: run.options.loginTimeoutSec,
+        site: run.site
       });
       const status = data.status;
       if (status === "READY") {
@@ -253,7 +258,7 @@ export class AgentManager {
       await this.pushStep(run, {
         ts: new Date().toISOString(),
         state: run.state,
-        action: "xhs_search",
+        action: "platform_search",
         status: "error",
         detail: { error: run.error }
       });
@@ -274,11 +279,12 @@ export class AgentManager {
         });
       }
 
-      const data = await this.mcpClient.callTool<{ status: string; notes: Note[] }>("xhs_search", {
+      const data = await this.mcpClient.callTool<{ status: string; notes: Note[] }>("platform_search", {
         sessionId: run.sessionId,
         query: run.searchQuery ?? run.query,
         maxNotes: run.options.maxNotes,
-        scrollTimes: run.options.scrollTimes
+        scrollTimes: run.options.scrollTimes,
+        site: run.site
       });
       if (data.status === "READY") {
         run.notes = data.notes;
@@ -286,7 +292,7 @@ export class AgentManager {
         await this.pushStep(run, {
           ts: new Date().toISOString(),
           state: run.state,
-          action: "xhs_search",
+          action: "platform_search",
           status: "ok",
           detail: { count: data.notes?.length ?? 0 }
         });
@@ -295,7 +301,7 @@ export class AgentManager {
         await this.pushStep(run, {
           ts: new Date().toISOString(),
           state: run.state,
-          action: "xhs_search",
+          action: "platform_search",
           status: "waiting",
           detail: { status: data.status, viewUrl: run.viewUrl }
         });
@@ -305,7 +311,7 @@ export class AgentManager {
         await this.pushStep(run, {
           ts: new Date().toISOString(),
           state: run.state,
-          action: "xhs_search",
+          action: "platform_search",
           status: "error",
           detail: { status: data.status }
         });
@@ -316,7 +322,7 @@ export class AgentManager {
       await this.pushStep(run, {
         ts: new Date().toISOString(),
         state: run.state,
-        action: "xhs_search",
+        action: "platform_search",
         status: "error",
         detail: { error: run.error }
       });

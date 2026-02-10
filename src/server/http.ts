@@ -72,18 +72,20 @@ export async function startHttpServer(): Promise<Server> {
         res.status(400).json({ error: "QUERY_REQUIRED" });
         return;
       }
-      const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : undefined;
-      const maxNotes = typeof req.body?.maxNotes === "number" ? req.body.maxNotes : undefined;
-      const scrollTimes = typeof req.body?.scrollTimes === "number" ? req.body.scrollTimes : undefined;
-      const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
+    const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : undefined;
+    const maxNotes = typeof req.body?.maxNotes === "number" ? req.body.maxNotes : undefined;
+    const scrollTimes = typeof req.body?.scrollTimes === "number" ? req.body.scrollTimes : undefined;
+    const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
+    const site = typeof req.body?.site === "string" ? req.body.site.trim() : undefined;
 
-      const run = await agentManager.createRun({
-        query,
-        sessionId,
-        maxNotes,
-        scrollTimes,
-        loginTimeoutSec
-      });
+    const run = await agentManager.createRun({
+      query,
+      sessionId,
+      maxNotes,
+      scrollTimes,
+      loginTimeoutSec,
+      site
+    });
       res.json(sanitizeOutput(agentManager.toPublicRun(run)));
     } catch (err) {
       const message = err instanceof Error ? err.message : "UNKNOWN_ERROR";
