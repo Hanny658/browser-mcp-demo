@@ -190,12 +190,64 @@ export async function xhsSearch(
   };
 
   const parseCount = (value) => {
-    const match = value.match(/[0-9.]+/);
+    if (!value) return null;
+    const cleaned = value.replace(/[,\\s]/g, "");
+    const match = cleaned.match(/([0-9]+(?:\\.[0-9]+)?)(万|w|k)?/i);
     if (!match) return null;
-    const num = Number.parseFloat(match[0]);
+    const num = Number.parseFloat(match[1]);
     if (!Number.isFinite(num)) return null;
-    const hasWan = value.includes("万");
-    return Math.round(hasWan ? num * 10000 : num);
+    const unit = (match[2] || "").toLowerCase();
+    let mult = 1;
+    if (unit === "万" || unit === "w") mult = 10000;
+    if (unit === "k") mult = 1000;
+    return Math.round(num * mult);
+  };
+
+  const getAttr = (el, name) => normalize((el && el.getAttribute && el.getAttribute(name)) || "");
+  const parseAdjacentCount = (el) => {
+    if (!el) return null;
+    const siblings = [el.nextElementSibling, el.previousElementSibling, el.parentElement].filter(Boolean);
+    for (const node of siblings) {
+      const count = parseCount(normalize((node && node.textContent) || ""));
+      if (count !== null) return count;
+    }
+    return null;
+  };
+
+  const findLikeCount = (card, cardText) => {
+    const fromText = findCount(cardText, ["赞", "点赞"]);
+    if (fromText !== null) return fromText;
+    if (!card) return null;
+    const likeHints = ["like", "zan", "dianzan", "thumb", "praise"];
+    const elements = card.querySelectorAll("span,div,em,i,button,a");
+    for (const el of elements) {
+      const text = normalize((el && el.textContent) || "");
+      const aria = getAttr(el, "aria-label");
+      const title = getAttr(el, "title");
+      const dataCount = getAttr(el, "data-count") || getAttr(el, "data-num") || getAttr(el, "data-number");
+      if (dataCount) {
+        const parsed = parseCount(dataCount);
+        if (parsed !== null) return parsed;
+      }
+      const candidates = [text, aria, title].filter((v) => v);
+      for (const cand of candidates) {
+        if (cand.includes("赞") || cand.includes("点赞")) {
+          const parsed = parseCount(cand);
+          if (parsed !== null) return parsed;
+          const adjacent = parseAdjacentCount(el);
+          if (adjacent !== null) return adjacent;
+        }
+      }
+      const className = (el.getAttribute("class") || "").toLowerCase();
+      if (likeHints.some((hint) => className.includes(hint))) {
+        const merged = text + " " + aria + " " + title;
+        const parsed = parseCount(merged);
+        if (parsed !== null) return parsed;
+        const adjacent = parseAdjacentCount(el);
+        if (adjacent !== null) return adjacent;
+      }
+    }
+    return null;
   };
 
   const findCount = (text, labels) => {
@@ -278,7 +330,7 @@ export async function xhsSearch(
     const desc = pickDesc(card);
     const author = pickAuthor(card);
 
-    const liked = findCount(cardText, ["赞", "点赞"]);
+    const liked = findLikeCount(card, cardText);
     const collected = findCount(cardText, ["收藏"]);
     const comments = findCount(cardText, ["评论"]);
     const shared = findCount(cardText, ["分享"]);
@@ -306,7 +358,7 @@ export async function xhsSearch(
 })()
 `;
 
-  const notes = await page.evaluate(script);
+  const notes = await page.evaluate(script) as Note[];
 
   return { status: "READY", notes };
 }

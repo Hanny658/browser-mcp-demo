@@ -65,7 +65,7 @@ const postJson = async (url: string, body: Record<string, unknown>) => {
 
 export function Home() {
   const [query, setQuery] = useState("");
-  const [maxNotes, setMaxNotes] = useState(8);
+  const [maxNotes, setMaxNotes] = useState(7);
   const [scrollTimes, setScrollTimes] = useState(2);
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -135,7 +135,8 @@ export function Home() {
       const payload: Record<string, unknown> = {
         query,
         maxNotes,
-        scrollTimes
+        scrollTimes,
+        loginTimeoutSec: 30
       };
       if (reuseSession && sessionId) {
         payload.sessionId = sessionId;
@@ -154,7 +155,7 @@ export function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 25 });
+      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 30 });
       applyRun(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Continue failed");
@@ -209,7 +210,7 @@ export function Home() {
               <input
                 type="range"
                 min={1}
-                max={50}
+                max={20}
                 value={maxNotes}
                 onInput={(event) => setMaxNotes(Number((event.target as HTMLInputElement).value))}
               />
@@ -219,7 +220,7 @@ export function Home() {
               <input
                 type="range"
                 min={0}
-                max={8}
+                max={5}
                 value={scrollTimes}
                 onInput={(event) => setScrollTimes(Number((event.target as HTMLInputElement).value))}
               />
@@ -253,7 +254,7 @@ export function Home() {
           <div class="callout">
             <div>
               <strong>Login required.</strong>
-              <p>Open the MCP session view, finish login, then click Continue.</p>
+              <p>Open the MCP session view, finish login, then click Continue (waits ~30s).</p>
               <code>{viewUrl}</code>
             </div>
             <button

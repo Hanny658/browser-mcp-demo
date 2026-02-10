@@ -23,15 +23,15 @@ export interface AgentRun {
   id: string;
   state: AgentState;
   query: string;
-  searchQuery?: string;
-  keywordCandidates?: string[];
-  sessionId?: string;
-  viewUrl?: string;
-  notes?: Note[];
+  searchQuery?: string | undefined;
+  keywordCandidates?: string[] | undefined;
+  sessionId?: string | undefined;
+  viewUrl?: string | undefined;
+  notes?: Note[] | undefined;
   createdAt: number;
   updatedAt: number;
   steps: AgentStep[];
-  error?: string;
+  error?: string | undefined;
   options: {
     maxNotes: number;
     scrollTimes: number;

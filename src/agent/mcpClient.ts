@@ -19,9 +19,10 @@ export class McpInProcessClient {
 
   async callTool<T>(name: string, args: Record<string, unknown>): Promise<T> {
     await this.ensureConnected();
-    const result = await this.client!.callTool({ name, arguments: args });
-    const first = result?.content?.[0];
-    if (first && first.type === "text") {
+    const result = (await this.client!.callTool({ name, arguments: args })) as unknown;
+    const content = (result as { content?: Array<{ type?: string; text?: string }> })?.content;
+    const first = Array.isArray(content) ? content[0] : undefined;
+    if (first && first.type === "text" && typeof first.text === "string") {
       try {
         return JSON.parse(first.text) as T;
       } catch {

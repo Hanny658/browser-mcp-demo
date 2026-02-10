@@ -15,7 +15,7 @@ export class AgentNarrator {
     action: string;
     state: string;
     outcome: string;
-    detail?: Record<string, unknown>;
+    detail?: Record<string, unknown> | undefined;
   }): Promise<string> {
     const fallback = `${input.action} -> ${input.outcome}`;
     if (!this.client) return fallback;

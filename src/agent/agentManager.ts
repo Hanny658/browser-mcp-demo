@@ -9,8 +9,8 @@ import type { AgentRun, AgentRunInput, AgentStep } from "./types.js";
 import type { Note } from "../types.js";
 
 const DEFAULT_MAX_NOTES = 20;
-const DEFAULT_SCROLL_TIMES = 2;
-const DEFAULT_LOGIN_TIMEOUT_SEC = 8;
+const DEFAULT_SCROLL_TIMES = 1;
+const DEFAULT_LOGIN_TIMEOUT_SEC = 30;
 const MAX_STEPS_PER_RUN = 4;
 
 export class AgentManager {
@@ -114,7 +114,6 @@ export class AgentManager {
 
       if (run.state === "NEED_LOGIN") {
         await this.handleWaitLogin(run);
-        if (run.state !== "READY") return;
         continue;
       }
 
