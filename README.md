@@ -26,9 +26,41 @@ This starts:
 - HTTP server on `http://HOST:PORT`
 - MCP server on stdio (connect with an MCP client)
 
+## Docker (single-user + noVNC)
+This path is intended for a single user (or `MAX_SESSIONS=1`). It runs the browser inside Xvfb and streams the desktop via noVNC.
+
+Build:
+```bash
+docker build -t browser-mcp-demo .
+```
+
+Run:
+```bash
+docker run --rm \
+  -p 3000:3000 -p 7900:7900 \
+  -e HOST=0.0.0.0 \
+  -e HEADLESS=false \
+  -e MAX_SESSIONS=1 \
+  -e VIEW_MODE=novnc \
+  -e PUBLIC_BASE_URL=http://YOUR_SERVER_IP:3000 \
+  -e NOVNC_URL_TEMPLATE="http://YOUR_SERVER_IP:7900/vnc.html?autoconnect=1&resize=scale&path=websockify" \
+  -e PROFILES_DIR=/data/profiles \
+  -e AUDIT_LOG_PATH=/data/logs/audit.log \
+  -e DELETE_PROFILE=false \
+  -v "$PWD/profiles:/data/profiles" \
+  -v "$PWD/logs:/data/logs" \
+  browser-mcp-demo
+```
+
+Notes:
+- `VIEW_MODE=novnc` makes `/session/view/:id` embed the live browser stream.
+- Update `PUBLIC_BASE_URL` and `NOVNC_URL_TEMPLATE` with your public host or domain.
+
 ## HITL Login Flow
 1. Call MCP tool `create_session` -> `{ sessionId, viewUrl }`
-2. Open `viewUrl` in your browser. A local Chromium window is opened for login.
+2. Open `viewUrl` in your browser.
+   - Default mode: a local Chromium window is opened for login.
+   - noVNC mode (`VIEW_MODE=novnc`): the remote browser stream is embedded in the page.
 3. Login on that window (QR/OTP/2FA handled by the user).
 4. Call `wait_for_login` until status is `READY` (site-aware when `site` is provided).
 
@@ -77,6 +109,9 @@ Example request body:
 ## Configuration
 Key environment variables:
 - `HOST`, `PORT`, `PUBLIC_BASE_URL`
+- `UI_DIST_DIR` (serve built UI from the same server)
+- `VIEW_MODE` (`info` | `novnc`)
+- `NOVNC_URL_TEMPLATE` (supports `{sessionId}` placeholder)
 - `OPENAI_API_KEY`, `OPENAI_MODEL`
 - `AGENT_RUN_TTL_MINUTES`
 - `MAX_SESSIONS`, `SESSION_TTL_MINUTES`

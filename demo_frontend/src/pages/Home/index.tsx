@@ -264,7 +264,8 @@ export function Home() {
           {error && <div class="error">{error}</div>}
         </form>
 
-        {needsLogin && (
+      {needsLogin && (
+        <>
           <div class="callout">
             <div>
               <strong>Login required.</strong>
@@ -279,7 +280,12 @@ export function Home() {
               Open Login View
             </button>
           </div>
-        )}
+          {/* Embedded view helps single-user deployments (e.g., noVNC). */}
+          <div class="login-frame">
+            <iframe src={viewUrl!} title="Remote session view" loading="lazy" />
+          </div>
+        </>
+      )}
       </section>
 
       <section class="grid">

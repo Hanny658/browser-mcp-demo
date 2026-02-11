@@ -1,4 +1,6 @@
 import express from "express";
+import fs from "fs";
+import path from "path";
 import type { Server } from "http";
 import { config } from "../config.js";
 import { sessionManager } from "../browser/sessionManager.js";
@@ -7,8 +9,40 @@ import { buildViewUrl } from "./viewUrl.js";
 import { normalizeSite } from "../sites/registry.js";
 import { agentManager } from "../agent/agentManager.js";
 
+const resolveNoVncUrl = (sessionId: string) => {
+  if (!config.novncUrlTemplate) return null;
+  return config.novncUrlTemplate.replace("{sessionId}", encodeURIComponent(sessionId));
+};
+
 const renderViewPage = (sessionId: string) => {
   const safeId = sessionId.replace(/[^a-zA-Z0-9-]/g, "");
+  const novncUrl = resolveNoVncUrl(sessionId);
+  if (config.viewMode === "novnc" && novncUrl) {
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Remote Browser Session</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; background: #f7f2e9; }
+    .frame { width: 100%; aspect-ratio: 16 / 9; border: 1px solid #d6cbb8; border-radius: 12px; overflow: hidden; }
+    iframe { width: 100%; height: 100%; border: 0; }
+    .meta { margin-top: 12px; color: #5a5043; font-size: 14px; }
+    a { color: #1a4d8f; }
+  </style>
+</head>
+<body>
+  <h1>Session ${safeId}</h1>
+  <p>Login below using the live browser stream.</p>
+  <div class="frame">
+    <iframe src="${novncUrl}" title="noVNC session view"></iframe>
+  </div>
+  <div class="meta">
+    If the embed fails, open it in a new tab: <a href="${novncUrl}" target="_blank" rel="noreferrer">Open noVNC</a>
+  </div>
+</body>
+</html>`;
+  }
   return `<!doctype html>
 <html>
 <head>
@@ -23,6 +57,7 @@ const renderViewPage = (sessionId: string) => {
   <h1>Session ${safeId}</h1>
   <p>This MVP uses a local headful Chromium window for HITL login.</p>
   <p>If you do not see a browser window, ensure <code>HEADLESS=false</code> and restart.</p>
+  <p>For remote deployment, set <code>VIEW_MODE=novnc</code> and <code>NOVNC_URL_TEMPLATE</code>.</p>
   <p>After login, return to your MCP client and call <code>wait_for_login</code>.</p>
 </body>
 </html>`;
@@ -119,6 +154,15 @@ export async function startHttpServer(): Promise<Server> {
     }
     res.json(sanitizeOutput(agentManager.toPublicRun(run)));
   });
+
+  const uiDistDir = config.uiDistDir;
+  const uiIndex = uiDistDir ? path.join(uiDistDir, "index.html") : "";
+  if (uiDistDir && fs.existsSync(uiIndex)) {
+    // Serve the built frontend when available (single-port deployment).
+    app.use(express.static(uiDistDir));
+    // Fallback to index.html for client-side routing without wildcard patterns.
+    app.use((_req, res) => res.sendFile(uiIndex));
+  }
 
   return new Promise((resolve) => {
     const server = app.listen(config.port, config.host, () => {

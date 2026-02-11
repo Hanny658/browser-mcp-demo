@@ -12,12 +12,24 @@ const parseBool = (value: string | undefined, fallback: boolean) => {
   return value === "1" || value.toLowerCase() === "true";
 };
 
+const parseViewMode = (value: string | undefined) => {
+  const mode = (value ?? "info").toLowerCase();
+  return mode === "novnc" ? "novnc" : "info";
+};
+
 const cwd = process.cwd();
 
 export const config = {
   host: process.env.HOST ?? "127.0.0.1",
   port: parseIntSafe(process.env.PORT, 3000),
   publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? "").replace(/\/+$/, ""),
+  // Optional: serve the built frontend from the same HTTP server.
+  uiDistDir: process.env.UI_DIST_DIR ? path.resolve(cwd, process.env.UI_DIST_DIR) : "",
+  // "info" shows a static instruction page; "novnc" embeds a noVNC iframe.
+  viewMode: parseViewMode(process.env.VIEW_MODE),
+  // Example: http://HOST:7900/vnc.html?autoconnect=1&resize=scale&path=websockify
+  // You can also include {sessionId} for future per-session routing.
+  novncUrlTemplate: process.env.NOVNC_URL_TEMPLATE ?? "",
   maxSessions: parseIntSafe(process.env.MAX_SESSIONS, 5),
   sessionTtlMs: parseIntSafe(process.env.SESSION_TTL_MINUTES, 60) * 60 * 1000,
   profilesDir: path.resolve(cwd, process.env.PROFILES_DIR ?? "./profiles"),

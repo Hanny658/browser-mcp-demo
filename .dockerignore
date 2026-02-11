@@ -1,0 +1,10 @@
+node_modules
+demo_frontend/node_modules
+logs
+profiles
+dist
+demo_frontend/dist
+.git
+.gitignore
+README.md
+start_dev.bat
