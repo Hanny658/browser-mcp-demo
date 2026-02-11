@@ -10,7 +10,13 @@ const tools = [
   {
     name: "create_session",
     description: "Create a new browser session and return sessionId + viewUrl.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+    inputSchema: {
+      type: "object",
+      properties: {
+        site: { type: "string" }
+      },
+      additionalProperties: false
+    }
   },
   {
     name: "wait_for_login",
@@ -104,7 +110,8 @@ export function createMcpServer() {
 
     switch (name) {
       case "create_session": {
-        const session = await sessionManager.createSession();
+        const site = normalizeSite(typeof args.site === "string" ? args.site : undefined);
+        const session = await sessionManager.createSession({ site });
         await auditLog("create_session", session.id);
         return respondJson({ sessionId: session.id, viewUrl: buildViewUrl(session.id) });
       }

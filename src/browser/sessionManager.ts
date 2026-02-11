@@ -27,7 +27,7 @@ export class SessionManager {
     this.janitor.unref?.();
   }
 
-  async createSession(): Promise<Session> {
+  async createSession(options?: { headless?: boolean; site?: string }): Promise<Session> {
     if (this.sessions.size >= config.maxSessions) {
       throw new Error("MAX_SESSIONS_REACHED");
     }
@@ -36,8 +36,13 @@ export class SessionManager {
     const userDataDir = path.join(config.profilesDir, id);
     await fs.mkdir(userDataDir, { recursive: true });
 
+    // Keep headful by default; allow site-specific overrides via options for future expansion.
+    const shouldHeadless =
+      typeof options?.headless === "boolean"
+        ? options.headless
+        : config.headless;
     const context = await chromium.launchPersistentContext(userDataDir, {
-      headless: config.headless,
+      headless: shouldHeadless,
       viewport: { width: 1280, height: 720 },
       locale: "zh-CN"
     });

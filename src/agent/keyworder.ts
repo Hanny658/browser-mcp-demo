@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
+import type { SiteId } from "../sites/types.js";
 
 export type KeywordResult = {
   queries: string[];
@@ -18,19 +19,20 @@ export class AgentKeyworder {
     }
   }
 
-  async extract(query: string): Promise<KeywordResult> {
+  async extract(query: string, site?: SiteId): Promise<KeywordResult> {
     const base = normalizeQuery(query);
     if (!this.client) {
       return { queries: base ? [base] : [], method: "fallback", reason: "no_api_key" };
     }
 
+    const targetLanguage = site === "xhs" ? "Chinese" : "English";
     const prompt = [
-      "You are a search keyword extractor for Xiaohongshu.",
+      "You are a search keyword extractor that identifies the intent of a user query.",
       "Return JSON only.",
       "Output schema: {\"queries\": [\"...\"]}.",
       "Rules:",
       "- Return 1-3 short search queries.",
-      "- Use Chinese if the input is Chinese.",
+      `- Always use ${targetLanguage} regardless of the input language.`,
       "- Keep location, cuisine, price, and key intent.",
       "- Avoid punctuation; keep concise.",
       `User query: ${base}`

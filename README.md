@@ -1,6 +1,6 @@
 # Remote Browser + MCP Tool Gateway (Multi-Site MVP)
 
-This project provides a minimal HITL (human-in-the-loop) remote browser session and an MCP tool gateway for restricted search/extraction. It currently supports XHS and includes stub adapters for Yelp and TripAdvisor.
+This project provides a minimal HITL (human-in-the-loop) remote browser session and an MCP tool gateway for restricted search/extraction. It currently supports XHS and includes real search adapters for Yelp and TripAdvisor.
 
 ## Requirements
 - Node.js >= 18
@@ -86,6 +86,6 @@ Key environment variables:
 - `AUDIT_LOG_PATH`
 
 ## Notes
- - The XHS adapter is real; Yelp and TripAdvisor adapters are currently stub data.
- - The DOM selectors for XHS may change. Update `src/browser/xhs.ts` if search extraction breaks.
+ - XHS, Yelp, and TripAdvisor all support search in the current adapter layer. Detail extraction for Yelp/TripAdvisor is still stubbed.
+ - The DOM selectors for each site may change. Update `src/browser/xhs.ts` or `src/sites/*.ts` if extraction breaks.
  - This MVP does not implement large-scale crawling or anti-bot bypass.

@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { sessionManager } from "../browser/sessionManager.js";
 import { sanitizeOutput } from "../security/policy.js";
 import { buildViewUrl } from "./viewUrl.js";
+import { normalizeSite } from "../sites/registry.js";
 import { agentManager } from "../agent/agentManager.js";
 
 const renderViewPage = (sessionId: string) => {
@@ -35,9 +36,10 @@ export async function startHttpServer(): Promise<Server> {
     res.json({ ok: true, time: new Date().toISOString() });
   });
 
-  app.post("/session", async (_req, res) => {
+  app.post("/session", async (req, res) => {
     try {
-      const session = await sessionManager.createSession();
+      const site = normalizeSite(typeof req.body?.site === "string" ? req.body.site : undefined);
+      const session = await sessionManager.createSession({ site });
       const payload = sanitizeOutput({
         sessionId: session.id,
         viewUrl: buildViewUrl(session.id)

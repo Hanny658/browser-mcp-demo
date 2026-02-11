@@ -235,8 +235,8 @@ export function Home() {
               <label class="label">Data source</label>
               <select value={site} onChange={(event) => setSite((event.target as HTMLSelectElement).value)}>
                 <option value="xhs">XHS</option>
-                <option value="yelp">Yelp (stub)</option>
-                <option value="tripadvisor">TripAdvisor (stub)</option>
+                <option value="yelp">Yelp</option>
+                <option value="tripadvisor">TripAdvisor</option>
               </select>
             </div>
             <label class="toggle">
@@ -317,17 +317,29 @@ export function Home() {
                 <div class="note-title">{note.title || note.desc || "Untitled note"}</div>
                 {note.author && <div class="note-author">by {note.author}</div>}
                 <p class="note-snippet">{note.snippet || note.desc || "No snippet available."}</p>
-                {(note.rating || note.location) && (
-                  <div class="note-extra">
-                    {note.rating && <span>Rating {note.rating.toFixed(1)}</span>}
-                    {note.location && <span>Location {note.location}</span>}
+                {site === "xhs" ? (
+                  <div class="note-meta">
+                    <span>Likes {formatCount(note.liked_count)}</span>
+                    <span>Collects {formatCount(note.collected_count)}</span>
+                    <span>Comments {formatCount(note.comments_count)}</span>
+                  </div>
+                ) : (
+                  <div class="note-meta">
+                    <span>Rating {note.rating ? note.rating.toFixed(1) : "--"}</span>
+                    {note.location ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(note.location)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        Location {note.location}
+                      </a>
+                    ) : (
+                      <span>Location --</span>
+                    )}
                   </div>
                 )}
-                <div class="note-meta">
-                  <span>Likes {formatCount(note.liked_count)}</span>
-                  <span>Collects {formatCount(note.collected_count)}</span>
-                  <span>Comments {formatCount(note.comments_count)}</span>
-                </div>
               </a>
             ))}
           </div>

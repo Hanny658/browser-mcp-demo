@@ -168,10 +168,9 @@ export class AgentManager {
     }
 
     try {
-      const data = await this.mcpClient.callTool<{ sessionId: string; viewUrl: string }>(
-        "create_session",
-        {}
-      );
+      const data = await this.mcpClient.callTool<{ sessionId: string; viewUrl: string }>("create_session", {
+        site: run.site
+      });
       run.sessionId = data.sessionId;
       run.viewUrl = data.viewUrl;
       run.state = "NEED_LOGIN";
@@ -267,7 +266,7 @@ export class AgentManager {
 
     try {
       if (!run.searchQuery) {
-        const result = await this.keyworder.extract(run.query);
+        const result = await this.keyworder.extract(run.query, run.site);
         run.keywordCandidates = result.queries;
         run.searchQuery = result.queries[0] ?? run.query;
         await this.pushStep(run, {
@@ -275,11 +274,21 @@ export class AgentManager {
           state: run.state,
           action: "keyword_extract",
           status: "ok",
-          detail: { count: result.queries.length, method: result.method, reason: result.reason ?? null }
+          detail: {
+            count: result.queries.length,
+            method: result.method,
+            reason: result.reason ?? null,
+            queries: result.queries.slice(0, 3)
+          }
         });
       }
 
-      const data = await this.mcpClient.callTool<{ status: string; notes: Note[] }>("platform_search", {
+      const data = await this.mcpClient.callTool<{
+        status: string;
+        notes: Note[];
+        reason?: string;
+        debug?: { url?: string; title?: string };
+      }>("platform_search", {
         sessionId: run.sessionId,
         query: run.searchQuery ?? run.query,
         maxNotes: run.options.maxNotes,
@@ -289,12 +298,17 @@ export class AgentManager {
       if (data.status === "READY") {
         run.notes = data.notes;
         run.state = "DONE";
+        const count = data.notes?.length ?? 0;
         await this.pushStep(run, {
           ts: new Date().toISOString(),
           state: run.state,
           action: "platform_search",
           status: "ok",
-          detail: { count: data.notes?.length ?? 0 }
+          detail: {
+            count,
+            reason: count === 0 ? data.reason ?? "no_results_or_blocked" : undefined,
+            debug: count === 0 ? data.debug : undefined
+          }
         });
       } else if (data.status === "NEED_LOGIN") {
         run.state = "NEED_LOGIN";

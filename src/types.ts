@@ -30,4 +30,6 @@ export interface Note {
 export interface SearchResult {
   status: ToolStatus;
   notes: Note[];
+  reason?: string;
+  debug?: { url?: string; title?: string };
 }
