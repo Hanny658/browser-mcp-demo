@@ -1,22 +1,11 @@
 services:
   app:
     build: .
+    env_file:
+      - .env
     ports:
       - "3000:3000"
       - "7900:7900"
-    environment:
-      HOST: 0.0.0.0
-      PORT: 3000
-      HEADLESS: "false"
-      MAX_SESSIONS: 1
-      VIEW_MODE: novnc
-      UI_DIST_DIR: /app/demo_frontend/dist
-      # Replace the host with your public IP or domain.
-      PUBLIC_BASE_URL: http://localhost:3000
-      NOVNC_URL_TEMPLATE: http://localhost:7900/vnc.html?autoconnect=1&resize=scale&path=websockify
-      PROFILES_DIR: /data/profiles
-      AUDIT_LOG_PATH: /data/logs/audit.log
-      DELETE_PROFILE: "false"
     volumes:
       - ./profiles:/data/profiles
       - ./logs:/data/logs
