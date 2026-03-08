@@ -23,10 +23,9 @@ type Note = {
   author?: string | null;
   snippet?: string | null;
   liked_count?: number | null;
-  collected_count?: number | null;
-  comments_count?: number | null;
   shared_count?: number | null;
   publish_time?: string | null;
+  images_list?: string[] | null;
   rating?: number | null;
   location?: string | null;
 };
@@ -69,7 +68,8 @@ const postJson = async (url: string, body: Record<string, unknown>) => {
 export function Home() {
   const [query, setQuery] = useState("");
   const [maxNotes, setMaxNotes] = useState(7);
-  const [scrollTimes, setScrollTimes] = useState(2);
+  const [scrollTimes, setScrollTimes] = useState(0);
+  const [detailCount, setDetailCount] = useState(3);
   const [site, setSite] = useState("xhs");
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -141,6 +141,7 @@ export function Home() {
         query,
         maxNotes,
         scrollTimes,
+        detailCount,
         site,
         loginTimeoutSec: 30
       };
@@ -161,7 +162,7 @@ export function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 30 });
+      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 30, detailCount });
       applyRun(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Continue failed");
@@ -231,6 +232,18 @@ export function Home() {
                 onInput={(event) => setScrollTimes(Number((event.target as HTMLInputElement).value))}
               />
             </div>
+            {site === "xhs" && (
+              <div class="control">
+                <label class="label">Detail notes: {detailCount}</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  value={detailCount}
+                  onInput={(event) => setDetailCount(Number((event.target as HTMLInputElement).value))}
+                />
+              </div>
+            )}
             <div class="control">
               <label class="label">Data source</label>
               <select value={site} onChange={(event) => setSite((event.target as HTMLSelectElement).value)}>
@@ -323,11 +336,14 @@ export function Home() {
                 <div class="note-title">{note.title || note.desc || "Untitled note"}</div>
                 {note.author && <div class="note-author">by {note.author}</div>}
                 <p class="note-snippet">{note.snippet || note.desc || "No snippet available."}</p>
+                {site === "xhs" && note.publish_time && <div class="note-extra">Published {note.publish_time}</div>}
+                {site === "xhs" && note.images_list && note.images_list.length > 0 && (
+                  <div class="note-extra">Images {note.images_list.length}</div>
+                )}
                 {site === "xhs" ? (
                   <div class="note-meta">
                     <span>Likes {formatCount(note.liked_count)}</span>
-                    <span>Collects {formatCount(note.collected_count)}</span>
-                    <span>Comments {formatCount(note.comments_count)}</span>
+                    <span>Shares {formatCount(note.shared_count)}</span>
                   </div>
                 ) : (
                   <div class="note-meta">

@@ -10,9 +10,12 @@ import type { AgentRun, AgentRunInput, AgentStep } from "./types.js";
 import type { Note } from "../types.js";
 
 const DEFAULT_MAX_NOTES = 20;
-const DEFAULT_SCROLL_TIMES = 1;
+const DEFAULT_SCROLL_TIMES = 0;
 const DEFAULT_LOGIN_TIMEOUT_SEC = 30;
+const DEFAULT_DETAIL_COUNT = 3;
 const MAX_STEPS_PER_RUN = 4;
+const DETAIL_EXTRACTION_MAX = 10;
+const DETAIL_EXTRACTION_PARALLEL = 2;
 
 export class AgentManager {
   private runs = new Map<string, AgentRun>();
@@ -49,6 +52,8 @@ export class AgentManager {
       viewUrl: run.viewUrl,
       query: run.query,
       site: run.site,
+      searchQuery: run.searchQuery ?? null,
+      keywordCandidates: run.keywordCandidates ?? [],
       notes: run.notes ?? [],
       steps: run.steps,
       error: run.error ?? null
@@ -70,7 +75,10 @@ export class AgentManager {
         scrollTimes: Number.isFinite(input.scrollTimes) ? Math.max(0, Math.floor(input.scrollTimes!)) : DEFAULT_SCROLL_TIMES,
         loginTimeoutSec: Number.isFinite(input.loginTimeoutSec)
           ? Math.max(1, Math.floor(input.loginTimeoutSec!))
-          : DEFAULT_LOGIN_TIMEOUT_SEC
+          : DEFAULT_LOGIN_TIMEOUT_SEC,
+        detailCount: Number.isFinite(input.detailCount)
+          ? Math.max(0, Math.min(Math.floor(input.detailCount!), DETAIL_EXTRACTION_MAX))
+          : DEFAULT_DETAIL_COUNT
       }
     };
 
@@ -92,6 +100,9 @@ export class AgentManager {
     }
     if (input?.loginTimeoutSec !== undefined && Number.isFinite(input.loginTimeoutSec)) {
       run.options.loginTimeoutSec = Math.max(1, Math.floor(input.loginTimeoutSec));
+    }
+    if (input?.detailCount !== undefined && Number.isFinite(input.detailCount)) {
+      run.options.detailCount = Math.max(0, Math.min(Math.floor(input.detailCount), DETAIL_EXTRACTION_MAX));
     }
 
     run.updatedAt = Date.now();
@@ -297,8 +308,11 @@ export class AgentManager {
       });
       if (data.status === "READY") {
         run.notes = data.notes;
+        if (run.site === "xhs" && run.options.detailCount > 0 && (data.notes?.length ?? 0) > 0) {
+          run.notes = await this.enrichXhsDetails(run, run.notes);
+        }
         run.state = "DONE";
-        const count = data.notes?.length ?? 0;
+        const count = run.notes?.length ?? 0;
         await this.pushStep(run, {
           ts: new Date().toISOString(),
           state: run.state,
@@ -341,6 +355,84 @@ export class AgentManager {
         detail: { error: run.error }
       });
     }
+  }
+
+  private mergeNote(base: Note, detail: Note): Note {
+    const mergedDesc = detail.desc ?? base.desc ?? null;
+    return {
+      ...base,
+      // Only enrich main body text to avoid detail-page noise overriding search metadata.
+      desc: mergedDesc,
+      snippet: mergedDesc ? mergedDesc.slice(0, 180) : base.snippet ?? null
+    };
+  }
+
+  private async enrichXhsDetails(run: AgentRun, notes: Note[]): Promise<Note[]> {
+    if (!run.sessionId) return notes;
+    const detailCount = Math.max(0, Math.min(run.options.detailCount, notes.length, DETAIL_EXTRACTION_MAX));
+    if (detailCount === 0) return notes;
+
+    const next = notes.slice();
+    const targetIndexes = next
+      .map((note, index) => ({ note, index }))
+      .filter(({ note }) => typeof note?.url === "string" && note.url.length > 0)
+      .slice(0, detailCount);
+
+    let success = 0;
+    let needLogin = 0;
+    let failed = 0;
+
+    for (let i = 0; i < targetIndexes.length; i += DETAIL_EXTRACTION_PARALLEL) {
+      const chunk = targetIndexes.slice(i, i + DETAIL_EXTRACTION_PARALLEL);
+      const results = await Promise.all(
+        chunk.map(async ({ note, index }) => {
+          try {
+            const detail = await this.mcpClient.callTool<{ status: string; note: Note | null }>("xhs_open_and_extract", {
+              sessionId: run.sessionId,
+              url: note.url,
+              site: run.site
+            });
+            return { index, detail };
+          } catch (err) {
+            return {
+              index,
+              detail: { status: "ERROR", note: null as Note | null, error: err instanceof Error ? err.message : "DETAIL_FAILED" }
+            };
+          }
+        })
+      );
+
+      for (const { index, detail } of results) {
+        if (detail.status === "READY" && detail.note) {
+          const existing = next[index];
+          if (existing) {
+            next[index] = this.mergeNote(existing, detail.note);
+            success += 1;
+          } else {
+            failed += 1;
+          }
+        } else if (detail.status === "NEED_LOGIN") {
+          needLogin += 1;
+        } else {
+          failed += 1;
+        }
+      }
+    }
+
+    await this.pushStep(run, {
+      ts: new Date().toISOString(),
+      state: run.state,
+      action: "xhs_open_and_extract",
+      status: success > 0 ? "ok" : failed > 0 ? "error" : "waiting",
+      detail: {
+        attempted: targetIndexes.length,
+        success,
+        needLogin,
+        failed
+      }
+    });
+
+    return next;
   }
 }
 

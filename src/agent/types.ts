@@ -9,6 +9,7 @@ export interface AgentRunInput {
   maxNotes?: number;
   scrollTimes?: number;
   loginTimeoutSec?: number;
+  detailCount?: number;
   site?: SiteId;
 }
 
@@ -39,5 +40,6 @@ export interface AgentRun {
     maxNotes: number;
     scrollTimes: number;
     loginTimeoutSec: number;
+    detailCount: number;
   };
 }

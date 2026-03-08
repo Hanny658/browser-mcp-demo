@@ -68,7 +68,7 @@ Notes:
 Tools:
  - `create_session`
  - `wait_for_login` (optional `site`)
- - `xhs_search` (site-aware via `site` param)
+ - `platform_search` (site-aware via `site` param)
  - `xhs_open_and_extract` (site-aware via `site` param)
  - `destroy_session`
 
@@ -76,12 +76,17 @@ Example (pseudo):
 ```ts
 const session = await client.callTool("create_session", {});
 await client.callTool("wait_for_login", { sessionId: session.sessionId, timeoutSec: 120 });
-const results = await client.callTool("xhs_search", {
+const results = await client.callTool("platform_search", {
   sessionId: session.sessionId,
   query: "camping",
   maxNotes: 10,
-  scrollTimes: 2,
+  scrollTimes: 0,
   site: "xhs" // xhs | yelp | tripadvisor
+});
+const detail = await client.callTool("xhs_open_and_extract", {
+  sessionId: session.sessionId,
+  url: results.notes[0]?.url,
+  site: "xhs"
 });
 ```
 
@@ -101,7 +106,8 @@ Example request body:
 {
   "query": "camping",
   "maxNotes": 10,
-  "scrollTimes": 2,
+  "scrollTimes": 0,
+  "detailCount": 3,
   "site": "xhs"
 }
 ```
@@ -121,6 +127,6 @@ Key environment variables:
 - `AUDIT_LOG_PATH`
 
 ## Notes
- - XHS, Yelp, and TripAdvisor all support search in the current adapter layer. Detail extraction for Yelp/TripAdvisor is still stubbed.
+ - XHS, Yelp, and TripAdvisor all support search in the current adapter layer. XHS detail extraction is implemented; Yelp/TripAdvisor detail extraction is still stubbed.
  - The DOM selectors for each site may change. Update `src/browser/xhs.ts` or `src/sites/*.ts` if extraction breaks.
  - This MVP does not implement large-scale crawling or anti-bot bypass.

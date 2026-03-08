@@ -113,6 +113,7 @@ export async function startHttpServer(): Promise<Server> {
     const maxNotes = typeof req.body?.maxNotes === "number" ? req.body.maxNotes : undefined;
     const scrollTimes = typeof req.body?.scrollTimes === "number" ? req.body.scrollTimes : undefined;
     const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
+    const detailCount = typeof req.body?.detailCount === "number" ? req.body.detailCount : undefined;
     const site = typeof req.body?.site === "string" ? req.body.site.trim() : undefined;
 
     const run = await agentManager.createRun({
@@ -121,6 +122,7 @@ export async function startHttpServer(): Promise<Server> {
       maxNotes,
       scrollTimes,
       loginTimeoutSec,
+      detailCount,
       site
     });
       res.json(sanitizeOutput(agentManager.toPublicRun(run)));
@@ -138,7 +140,8 @@ export async function startHttpServer(): Promise<Server> {
         return;
       }
       const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
-      const run = await agentManager.advanceRun(runId, { loginTimeoutSec });
+      const detailCount = typeof req.body?.detailCount === "number" ? req.body.detailCount : undefined;
+      const run = await agentManager.advanceRun(runId, { loginTimeoutSec, detailCount });
       res.json(sanitizeOutput(agentManager.toPublicRun(run)));
     } catch (err) {
       const message = err instanceof Error ? err.message : "UNKNOWN_ERROR";

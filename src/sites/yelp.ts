@@ -121,8 +121,6 @@ export const yelpAdapter: SiteAdapter = {
       author: null,
       snippet: snippet || null,
       liked_count: null,
-      collected_count: null,
-      comments_count: null,
       shared_count: null,
       publish_time: null,
       images_list: null,

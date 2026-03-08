@@ -17,8 +17,6 @@ export interface Note {
   author?: string | null;
   snippet?: string | null;
   liked_count?: number | null;
-  collected_count?: number | null;
-  comments_count?: number | null;
   shared_count?: number | null;
   publish_time?: string | null;
   images_list?: string[] | null;
