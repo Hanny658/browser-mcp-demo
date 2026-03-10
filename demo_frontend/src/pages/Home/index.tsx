@@ -69,7 +69,8 @@ export function Home() {
   const [query, setQuery] = useState("");
   const [maxNotes, setMaxNotes] = useState(7);
   const [scrollTimes, setScrollTimes] = useState(0);
-  const [detailCount, setDetailCount] = useState(3);
+  const [detailCount, setDetailCount] = useState(0);
+  const [detailParallel, setDetailParallel] = useState(4);
   const [site, setSite] = useState("xhs");
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -142,6 +143,7 @@ export function Home() {
         maxNotes,
         scrollTimes,
         detailCount,
+        detailParallel,
         site,
         loginTimeoutSec: 30
       };
@@ -162,7 +164,7 @@ export function Home() {
     setLoading(true);
     setError(null);
     try {
-      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 30, detailCount });
+      const data = await postJson("/agent/continue", { runId, loginTimeoutSec: 30, detailCount, detailParallel });
       applyRun(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Continue failed");
@@ -244,6 +246,18 @@ export function Home() {
                 />
               </div>
             )}
+            {site === "xhs" && detailCount > 0 && (
+              <div class="control">
+                <label class="label">Parallel Fetcher: {detailParallel}</label>
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  value={detailParallel}
+                  onInput={(event) => setDetailParallel(Number((event.target as HTMLInputElement).value))}
+                />
+              </div>
+            )}
             <div class="control">
               <label class="label">Data source</label>
               <select value={site} onChange={(event) => setSite((event.target as HTMLSelectElement).value)}>
@@ -252,15 +266,16 @@ export function Home() {
                 <option value="tripadvisor">TripAdvisor</option>
               </select>
             </div>
-            <label class="toggle">
-              <input
-                type="checkbox"
-                checked={reuseSession}
-                onChange={(event) => setReuseSession((event.target as HTMLInputElement).checked)}
-              />
-              Reuse session
-            </label>
           </div>
+          
+          <label class="toggle">
+            <input
+              type="checkbox"
+              checked={reuseSession}
+              onChange={(event) => setReuseSession((event.target as HTMLInputElement).checked)}
+            />
+            Reuse session
+          </label>
 
           <div class="actions">
             <button class="primary" type="submit" disabled={loading || !query.trim()}>

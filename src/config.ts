@@ -41,5 +41,7 @@ export const config = {
   mcpHttpPort: parseIntSafe(process.env.MCP_HTTP_PORT, 3333),
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-5-mini",
-  agentRunTtlMs: parseIntSafe(process.env.AGENT_RUN_TTL_MINUTES, 60) * 60 * 1000
+  agentRunTtlMs: parseIntSafe(process.env.AGENT_RUN_TTL_MINUTES, 60) * 60 * 1000,
+  agentDetailParallel: parseIntSafe(process.env.AGENT_DETAIL_PARALLEL, 4),
+  agentDetailTimeoutMs: parseIntSafe(process.env.AGENT_DETAIL_TIMEOUT_MS, 12000)
 };

@@ -369,11 +369,13 @@ export async function xhsSearch(
   if (!safeQuery) throw new Error("QUERY_REQUIRED");
 
   const max = clamp(Math.floor(maxNotes || 20), 1, MAX_NOTES_LIMIT);
-  const scrolls = clamp(Math.floor(scrollTimes || 2), 0, MAX_SCROLL_LIMIT);
+  const scrollInput =
+    typeof scrollTimes === "number" && Number.isFinite(scrollTimes) ? scrollTimes : 2;
+  const scrolls = clamp(Math.floor(scrollInput), 0, MAX_SCROLL_LIMIT);
 
   const url = `${config.xhsBaseUrl}/search_result?keyword=${encodeURIComponent(safeQuery)}`;
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(700);
   const resultSelector = 'a[href*="/explore/"], a[href*="/discovery/item/"]';
   try {
     await page.waitForSelector(resultSelector, { timeout: 8000 });
@@ -386,10 +388,10 @@ export async function xhsSearch(
 
   for (let i = 0; i < scrolls; i += 1) {
     await page.mouse.wheel(0, 2400);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(600);
     const count = await resultLocator.count();
     if (count === lastCount) {
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(400);
     }
     lastCount = count;
   }
@@ -583,13 +585,11 @@ export async function xhsOpenAndExtract(
   if (!normalizedUrl) throw new Error("INVALID_NOTE_URL");
 
   const fallbackId = extractNoteIdFromUrl(normalizedUrl);
-  const basePage = getActivePage(session);
+  const basePage = session.page && !session.page.isClosed() ? session.page : getActivePage(session);
   const loginOk = await detectLogin(basePage);
   if (!loginOk) return { status: "NEED_LOGIN", note: null };
 
   const detailPage = await session.context.newPage();
-  const previousPage = basePage;
-  session.page = detailPage;
 
   let apiNote: Partial<Note> | null = null;
   const responseHandler = async (response: Response) => {
@@ -621,9 +621,10 @@ export async function xhsOpenAndExtract(
 
   try {
     await detailPage.goto(normalizedUrl, { waitUntil: "domcontentloaded" });
-    await detailPage.waitForLoadState("networkidle", { timeout: 12_000 }).catch(() => undefined);
-    await detailPage.waitForTimeout(1000);
-    await detailPage.waitForSelector("h1, article, main", { timeout: 8_000 }).catch(() => undefined);
+    await Promise.race([
+      detailPage.waitForSelector("h1, article, main", { timeout: 2_800 }).catch(() => undefined),
+      detailPage.waitForTimeout(800)
+    ]);
 
     const stillLoggedIn = await detectLogin(detailPage);
     if (!stillLoggedIn) {
@@ -749,10 +750,6 @@ export async function xhsOpenAndExtract(
     if (!detailPage.isClosed()) {
       await detailPage.close().catch(() => undefined);
     }
-    if (!previousPage.isClosed()) {
-      session.page = previousPage;
-    } else {
-      session.page = getActivePage(session);
-    }
+    // Keep session.page unchanged to avoid races when multiple detail extractions run concurrently.
   }
 }

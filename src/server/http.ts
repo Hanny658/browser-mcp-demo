@@ -114,6 +114,7 @@ export async function startHttpServer(): Promise<Server> {
     const scrollTimes = typeof req.body?.scrollTimes === "number" ? req.body.scrollTimes : undefined;
     const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
     const detailCount = typeof req.body?.detailCount === "number" ? req.body.detailCount : undefined;
+    const detailParallel = typeof req.body?.detailParallel === "number" ? req.body.detailParallel : undefined;
     const site = typeof req.body?.site === "string" ? req.body.site.trim() : undefined;
 
     const run = await agentManager.createRun({
@@ -123,6 +124,7 @@ export async function startHttpServer(): Promise<Server> {
       scrollTimes,
       loginTimeoutSec,
       detailCount,
+      detailParallel,
       site
     });
       res.json(sanitizeOutput(agentManager.toPublicRun(run)));
@@ -141,7 +143,8 @@ export async function startHttpServer(): Promise<Server> {
       }
       const loginTimeoutSec = typeof req.body?.loginTimeoutSec === "number" ? req.body.loginTimeoutSec : undefined;
       const detailCount = typeof req.body?.detailCount === "number" ? req.body.detailCount : undefined;
-      const run = await agentManager.advanceRun(runId, { loginTimeoutSec, detailCount });
+      const detailParallel = typeof req.body?.detailParallel === "number" ? req.body.detailParallel : undefined;
+      const run = await agentManager.advanceRun(runId, { loginTimeoutSec, detailCount, detailParallel });
       res.json(sanitizeOutput(agentManager.toPublicRun(run)));
     } catch (err) {
       const message = err instanceof Error ? err.message : "UNKNOWN_ERROR";

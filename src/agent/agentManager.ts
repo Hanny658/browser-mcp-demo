@@ -12,10 +12,13 @@ import type { Note } from "../types.js";
 const DEFAULT_MAX_NOTES = 20;
 const DEFAULT_SCROLL_TIMES = 0;
 const DEFAULT_LOGIN_TIMEOUT_SEC = 30;
-const DEFAULT_DETAIL_COUNT = 3;
+const DEFAULT_DETAIL_COUNT = 0;
 const MAX_STEPS_PER_RUN = 4;
 const DETAIL_EXTRACTION_MAX = 10;
-const DETAIL_EXTRACTION_PARALLEL = 2;
+const DETAIL_EXTRACTION_PARALLEL_MAX = 8;
+const DETAIL_EXTRACTION_TIMEOUT_MS = Math.max(3000, config.agentDetailTimeoutMs);
+const DETAIL_RETRY_TIMEOUT_MS = Math.max(DETAIL_EXTRACTION_TIMEOUT_MS + 5000, Math.floor(DETAIL_EXTRACTION_TIMEOUT_MS * 1.5));
+const DEFAULT_DETAIL_PARALLEL = Math.max(1, Math.min(config.agentDetailParallel, DETAIL_EXTRACTION_PARALLEL_MAX));
 
 export class AgentManager {
   private runs = new Map<string, AgentRun>();
@@ -54,6 +57,7 @@ export class AgentManager {
       site: run.site,
       searchQuery: run.searchQuery ?? null,
       keywordCandidates: run.keywordCandidates ?? [],
+      options: run.options,
       notes: run.notes ?? [],
       steps: run.steps,
       error: run.error ?? null
@@ -78,7 +82,10 @@ export class AgentManager {
           : DEFAULT_LOGIN_TIMEOUT_SEC,
         detailCount: Number.isFinite(input.detailCount)
           ? Math.max(0, Math.min(Math.floor(input.detailCount!), DETAIL_EXTRACTION_MAX))
-          : DEFAULT_DETAIL_COUNT
+          : DEFAULT_DETAIL_COUNT,
+        detailParallel: Number.isFinite(input.detailParallel)
+          ? Math.max(1, Math.min(Math.floor(input.detailParallel!), DETAIL_EXTRACTION_PARALLEL_MAX))
+          : DEFAULT_DETAIL_PARALLEL
       }
     };
 
@@ -103,6 +110,12 @@ export class AgentManager {
     }
     if (input?.detailCount !== undefined && Number.isFinite(input.detailCount)) {
       run.options.detailCount = Math.max(0, Math.min(Math.floor(input.detailCount), DETAIL_EXTRACTION_MAX));
+    }
+    if (input?.detailParallel !== undefined && Number.isFinite(input.detailParallel)) {
+      run.options.detailParallel = Math.max(
+        1,
+        Math.min(Math.floor(input.detailParallel), DETAIL_EXTRACTION_PARALLEL_MAX)
+      );
     }
 
     run.updatedAt = Date.now();
@@ -381,24 +394,44 @@ export class AgentManager {
     let success = 0;
     let needLogin = 0;
     let failed = 0;
+    let timeout = 0;
+    const timeoutIndexes = new Set<number>();
+    let retried = 0;
+    let retryRecovered = 0;
 
-    for (let i = 0; i < targetIndexes.length; i += DETAIL_EXTRACTION_PARALLEL) {
-      const chunk = targetIndexes.slice(i, i + DETAIL_EXTRACTION_PARALLEL);
+    const withTimeout = async <T>(task: Promise<T>, timeoutMs: number): Promise<T> => {
+      return await Promise.race([
+        task,
+        new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error("DETAIL_TIMEOUT")), timeoutMs))
+      ]);
+    };
+
+    const extractDetail = async (url: string, timeoutMs: number) => {
+      try {
+        const detail = await withTimeout(
+          this.mcpClient.callTool<{ status: string; note: Note | null }>("xhs_open_and_extract", {
+            sessionId: run.sessionId,
+            url,
+            site: run.site
+          }),
+          timeoutMs
+        );
+        return detail;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "DETAIL_FAILED";
+        return { status: message === "DETAIL_TIMEOUT" ? "TIMEOUT" : "ERROR", note: null as Note | null, error: message };
+      }
+    };
+
+    for (let i = 0; i < targetIndexes.length; i += run.options.detailParallel) {
+      const chunk = targetIndexes.slice(i, i + run.options.detailParallel);
       const results = await Promise.all(
         chunk.map(async ({ note, index }) => {
-          try {
-            const detail = await this.mcpClient.callTool<{ status: string; note: Note | null }>("xhs_open_and_extract", {
-              sessionId: run.sessionId,
-              url: note.url,
-              site: run.site
-            });
-            return { index, detail };
-          } catch (err) {
-            return {
-              index,
-              detail: { status: "ERROR", note: null as Note | null, error: err instanceof Error ? err.message : "DETAIL_FAILED" }
-            };
-          }
+          const detail = await extractDetail(note.url, DETAIL_EXTRACTION_TIMEOUT_MS);
+          return {
+            index,
+            detail
+          };
         })
       );
 
@@ -413,8 +446,32 @@ export class AgentManager {
           }
         } else if (detail.status === "NEED_LOGIN") {
           needLogin += 1;
+        } else if (detail.status === "TIMEOUT") {
+          timeout += 1;
+          timeoutIndexes.add(index);
         } else {
           failed += 1;
+        }
+      }
+    }
+
+    if (timeoutIndexes.size > 0 && run.options.detailParallel > 1) {
+      for (const index of timeoutIndexes) {
+        const note = next[index];
+        if (!note?.url) continue;
+        retried += 1;
+        const detail = await extractDetail(note.url, DETAIL_RETRY_TIMEOUT_MS);
+        if (detail.status === "READY" && detail.note) {
+          next[index] = this.mergeNote(note, detail.note);
+          success += 1;
+          timeout = Math.max(0, timeout - 1);
+          retryRecovered += 1;
+        } else if (detail.status === "NEED_LOGIN") {
+          needLogin += 1;
+          timeout = Math.max(0, timeout - 1);
+        } else if (detail.status === "ERROR") {
+          failed += 1;
+          timeout = Math.max(0, timeout - 1);
         }
       }
     }
@@ -423,12 +480,16 @@ export class AgentManager {
       ts: new Date().toISOString(),
       state: run.state,
       action: "xhs_open_and_extract",
-      status: success > 0 ? "ok" : failed > 0 ? "error" : "waiting",
+      status: success > 0 ? "ok" : failed > 0 || timeout > 0 ? "error" : "waiting",
       detail: {
         attempted: targetIndexes.length,
+        parallel: run.options.detailParallel,
         success,
         needLogin,
-        failed
+        timeout,
+        failed,
+        retried,
+        retryRecovered
       }
     });
 

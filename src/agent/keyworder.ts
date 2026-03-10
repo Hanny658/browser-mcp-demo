@@ -32,7 +32,7 @@ export class AgentKeyworder {
       "Output schema: {\"queries\": [\"...\"]}.",
       "Rules:",
       "- Return 1-3 short search queries.",
-      `- Always use ${targetLanguage} regardless of the input language.`,
+      `- Always use ${targetLanguage} regardless of the input language, except for proper nouns.`,
       "- Keep location, cuisine, price, and key intent.",
       "- Avoid punctuation; keep concise.",
       `User query: ${base}`

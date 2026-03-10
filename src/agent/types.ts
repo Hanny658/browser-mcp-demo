@@ -10,6 +10,7 @@ export interface AgentRunInput {
   scrollTimes?: number;
   loginTimeoutSec?: number;
   detailCount?: number;
+  detailParallel?: number;
   site?: SiteId;
 }
 
@@ -41,5 +42,6 @@ export interface AgentRun {
     scrollTimes: number;
     loginTimeoutSec: number;
     detailCount: number;
+    detailParallel: number;
   };
 }

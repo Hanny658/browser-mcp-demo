@@ -108,6 +108,7 @@ Example request body:
   "maxNotes": 10,
   "scrollTimes": 0,
   "detailCount": 3,
+  "detailParallel": 4,
   "site": "xhs"
 }
 ```
